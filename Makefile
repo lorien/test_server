@@ -1,8 +1,8 @@
 flake:
-	flake8 test_server test
+	flake8 test_server test script
 
 flake_verbose:
-	flake8 test_server test --show-pep8
+	flake8 test_server test script --show-pep8
 
 test:
 	run test

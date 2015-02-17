@@ -1,4 +1,3 @@
-import time
 from unittest import TestCase
 try:
     from urllib import urlopen
@@ -6,6 +5,7 @@ except ImportError:
     from urllib.request import urlopen
 
 from test_server import TestServer
+
 
 class TestTornadoServer(TestCase):
     @classmethod
@@ -36,7 +36,6 @@ class TestTornadoServer(TestCase):
         self.assertEqual(self.server.request['path'], '/foo')
         self.assertEqual(self.server.request['args']['bar'], '1')
 
-
     def test_post(self):
         self.server.response['post'] = b'foo'
         data = urlopen(self.server.base_url, b'THE POST').read()
@@ -52,7 +51,7 @@ class TestTornadoServer(TestCase):
                 return 'foo'
 
         gen = ContentGenerator()
-        self.server.response['get'] = gen 
+        self.server.response['get'] = gen
         urlopen(self.server.base_url).read()
         self.assertEqual(gen.count, 1)
         urlopen(self.server.base_url).read()

@@ -4,7 +4,6 @@ import tornado.web
 import time
 import collections
 import tornado.gen
-import itertools
 
 __all__ = ('TestServer',)
 
@@ -68,9 +67,9 @@ class TestServer(object):
                 method_name = self.request.method.lower()
 
                 if SERVER.sleep.get(method_name, None):
-                    #time.sleep(SERVER.sleep[method_name])
                     yield tornado.gen.Task(IOLoop.instance().add_timeout,
-                                           time.time() + next(SERVER.sleep[method_name]))
+                                           time.time() +
+                                           next(SERVER.sleep[method_name]))
                 SERVER.request['args'] = {}
                 for key in self.request.arguments.keys():
                     SERVER.request['args'][key] = self.get_argument(key)
@@ -94,15 +93,20 @@ class TestServer(object):
                         self.set_status(SERVER.response['code'])
 
                     if SERVER.response_once['cookies']:
-                        for name, value in sorted(SERVER.response_once['cookies'].items()):
-                            # Set-Cookie: name=newvalue; expires=date; path=/; domain=.example.org.
-                            self.add_header('Set-Cookie', '%s=%s' % (name, value))
+                        for key, val in sorted(SERVER.response_once['cookies']
+                                                     .items()):
+                            # Set-Cookie: name=newvalue; expires=date;
+                            # path=/; domain=.example.org.
+                            self.add_header('Set-Cookie', '%s=%s' % (key, val))
                         SERVER.response_once['cookies'] = None
                     else:
                         if SERVER.response['cookies']:
-                            for name, value in sorted(SERVER.response['cookies'].items()):
-                                # Set-Cookie: name=newvalue; expires=date; path=/; domain=.example.org.
-                                self.add_header('Set-Cookie', '%s=%s' % (name, value))
+                            for key, val in sorted(SERVER.response['cookies']
+                                                         .items()):
+                                # Set-Cookie: name=newvalue; expires=date;
+                                # path=/; domain=.example.org.
+                                self.add_header('Set-Cookie',
+                                                '%s=%s' % (key, val))
 
                     if SERVER.response['headers']:
                         for name, value in SERVER.response['headers']:
@@ -113,11 +117,13 @@ class TestServer(object):
                         self.set_header(key, value)
                         headers_sent.add(key)
 
-                    self.set_header('Listen-Port', str(self.application._listen_port))
+                    self.set_header('Listen-Port',
+                                    str(self.application._listen_port))
 
-                    if not 'Content-Type' in headers_sent:
+                    if 'Content-Type' not in headers_sent:
                         charset = 'utf-8'
-                        self.set_header('Content-Type', 'text/html; charset=%s' % charset)
+                        self.set_header('Content-Type',
+                                        'text/html; charset=%s' % charset)
                         headers_sent.add('Content-Type')
 
                     if SERVER.response_once.get(method_name) is not None:
@@ -132,7 +138,8 @@ class TestServer(object):
 
                     if SERVER.timeout_iterator:
                         yield tornado.gen.Task(IOLoop.instance().add_timeout,
-                                               time.time() + next(SERVER.timeout_iteratoR))
+                                               time.time() +
+                                               next(SERVER.timeout_iteratoR))
                     self.finish()
 
             get = method_handler
@@ -147,11 +154,9 @@ class TestServer(object):
         return self._handler
 
     def start(self):
-        SERVER = self
+        handler = self.get_handler()
 
         def func():
-            handler = self.get_handler()
-
             app1 = tornado.web.Application([
                 (r"^.*", handler),
             ])
@@ -181,5 +186,4 @@ class TestServer(object):
         time.sleep(0.1)
 
     def stop(self):
-        #tornado.ioloop.IOLoop.instance().stop()
         self._loop.stop()
