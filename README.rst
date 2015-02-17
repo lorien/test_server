@@ -49,8 +49,8 @@ Example:
 
         def test_get(self):
             token = b'zorro'
-            SERVER.RESPONSE['get'] = token
-            data = urlopen(SERVER.BASE_URL).read()
+            self.server.response['get'] = token
+            data = urlopen(self.server.base_url).read()
             self.assertEqual(data, token)
 
 
