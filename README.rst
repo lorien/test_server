@@ -2,7 +2,7 @@
 Test-server
 ===========
 
-.. image:: https://travis-ci.org/lorien/test_server.png?branch=master
+.. image:: https://travis-ci.org/lorien/test-server.png?branch=master
     :target: https://travis-ci.org/lorien/test_server
 
 .. image:: https://coveralls.io/repos/lorien/test_server/badge.svg?branch=master
