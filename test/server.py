@@ -4,6 +4,7 @@ try:
 except ImportError:
     from urllib.request import urlopen
 import time
+import six
 
 from test_server import TestServer
 
@@ -64,13 +65,13 @@ class TestTornadoServer(TestCase):
         self.assertEqual(gen.count, 2)
 
     def test_response_once_get(self):
-        self.server.response['get'] = 'base'
-        self.assertEquals('base', urlopen(self.server.base_url).read())
+        self.server.response['get'] = b'base'
+        self.assertEquals(b'base', urlopen(self.server.base_url).read())
 
-        self.server.response_once['get'] = 'tmp'
-        self.assertEquals('tmp', urlopen(self.server.base_url).read())
+        self.server.response_once['get'] = b'tmp'
+        self.assertEquals(b'tmp', urlopen(self.server.base_url).read())
 
-        self.assertEquals('base', urlopen(self.server.base_url).read())
+        self.assertEquals(b'base', urlopen(self.server.base_url).read())
 
     def test_response_once_headers(self):
         self.server.response['headers'] = [('foo', 'bar')]
@@ -109,26 +110,30 @@ class TestTornadoServer(TestCase):
     def test_callback(self):
         def callback(self):
             self.set_header('foo', 'bar')
-            self.write('Hello')
+            self.write(b'Hello')
             self.finish()
 
         self.server.response['get_callback'] = callback
         info = urlopen(self.server.base_url)
         self.assertTrue(info.headers['foo'] == 'bar')
-        self.assertEqual(info.read(), 'Hello')
+        self.assertEqual(info.read(), b'Hello')
 
         self.server.response['post_callback'] = callback
-        info = urlopen(self.server.base_url, 'key=val')
+        info = urlopen(self.server.base_url, b'key=val')
         self.assertTrue(info.headers['foo'] == 'bar')
-        self.assertEqual(info.read(), 'Hello')
+        self.assertEqual(info.read(), b'Hello')
 
     def test_response_once_code(self):
         info = urlopen(self.server.base_url)
         self.assertEqual(info.getcode(), 200)
 
         self.server.response_once['code'] = 403
-        info = urlopen(self.server.base_url)
-        self.assertEqual(info.getcode(), 403)
+        if six.PY2:
+            info = urlopen(self.server.base_url)
+            self.assertEqual(info.getcode(), 403)
+        else:
+            from urllib.error import HTTPError
+            self.assertRaises(HTTPError, urlopen, self.server.base_url)
 
         info = urlopen(self.server.base_url)
         self.assertEqual(info.getcode(), 200)
@@ -148,9 +153,9 @@ class TestTornadoServer(TestCase):
         self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
 
     def test_response_content_callable(self):
-        self.server.response['get'] = lambda: 'Hello'
+        self.server.response['get'] = lambda: b'Hello'
         info = urlopen(self.server.base_url)
-        self.assertEqual(info.read(), 'Hello')
+        self.assertEqual(info.read(), b'Hello')
 
     def test_timeout_iterator(self):
         delays = (0.5, 0.3, 0.1)
