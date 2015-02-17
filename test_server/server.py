@@ -38,9 +38,13 @@ class TestServer(object):
             'post': '',
             'cookies': None,
             'headers': [],
-            'get_callback': None,
             'code': 200,
         })
+
+        for method in ('get', 'post', 'head', 'options', 'put', 'delete',
+                       'patch', 'trace', 'connect'):
+            self.response['%s_callback' % method] = None
+
         self.response_once.update({
             'get': None,
             'post': None,
@@ -69,7 +73,7 @@ class TestServer(object):
                 if SERVER.sleep.get(method_name, None):
                     yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                            time.time() +
-                                           next(SERVER.sleep[method_name]))
+                                           SERVER.sleep[method_name])
                 SERVER.request['args'] = {}
                 for key in self.request.arguments.keys():
                     SERVER.request['args'][key] = self.get_argument(key)
@@ -108,14 +112,16 @@ class TestServer(object):
                                 self.add_header('Set-Cookie',
                                                 '%s=%s' % (key, val))
 
-                    if SERVER.response['headers']:
+
+
+                    if SERVER.response_once['headers']:
+                        while SERVER.response_once['headers']:
+                            key, value = SERVER.response_once['headers'].pop()
+                            self.set_header(key, value)
+                            headers_sent.add(key)
+                    else:
                         for name, value in SERVER.response['headers']:
                             self.set_header(name, value)
-
-                    while SERVER.response_once['headers']:
-                        key, value = SERVER.response_once['headers'].pop()
-                        self.set_header(key, value)
-                        headers_sent.add(key)
 
                     self.set_header('Listen-Port',
                                     str(self.application._listen_port))
@@ -139,7 +145,7 @@ class TestServer(object):
                     if SERVER.timeout_iterator:
                         yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                                time.time() +
-                                               next(SERVER.timeout_iteratoR))
+                                               next(SERVER.timeout_iterator))
                     self.finish()
 
             get = method_handler

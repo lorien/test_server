@@ -3,6 +3,7 @@ try:
     from urllib import urlopen
 except ImportError:
     from urllib.request import urlopen
+import time
 
 from test_server import TestServer
 
@@ -61,3 +62,102 @@ class TestTornadoServer(TestCase):
         # requests
         urlopen(self.server.base_url, b'some post').read()
         self.assertEqual(gen.count, 2)
+
+    def test_response_once_get(self):
+        self.server.response['get'] = 'base'
+        self.assertEquals('base', urlopen(self.server.base_url).read())
+
+        self.server.response_once['get'] = 'tmp'
+        self.assertEquals('tmp', urlopen(self.server.base_url).read())
+
+        self.assertEquals('base', urlopen(self.server.base_url).read())
+
+    def test_response_once_headers(self):
+        self.server.response['headers'] = [('foo', 'bar')]
+        info = urlopen(self.server.base_url)
+        self.assertTrue(info.headers['foo'] == 'bar')
+
+        self.server.response_once['headers'] = [('baz', 'gaz')]
+        info = urlopen(self.server.base_url)
+        self.assertTrue(info.headers['baz'] == 'gaz')
+        self.assertFalse('foo' in info.headers)
+
+        info = urlopen(self.server.base_url)
+        self.assertFalse('baz' in info.headers)
+        self.assertTrue(info.headers['foo'] == 'bar')
+
+    def test_response_once_reset_headers(self):
+        self.server.response_once['headers'] = [('foo', 'bar')]
+        self.server.reset()
+        info = urlopen(self.server.base_url)
+        self.assertFalse('foo' in info.headers)
+
+    def test_method_sleep(self):
+        delay = 0.3
+
+        start = time.time()
+        info = urlopen(self.server.base_url)
+        elapsed = time.time() - start
+        self.assertFalse(elapsed > delay)
+
+        self.server.sleep['get'] = delay
+        start = time.time()
+        info = urlopen(self.server.base_url)
+        elapsed = time.time() - start
+        self.assertTrue(elapsed > delay)
+
+    def test_callback(self):
+        def callback(self):
+            self.set_header('foo', 'bar')
+            self.write('Hello')
+            self.finish()
+
+        self.server.response['get_callback'] = callback
+        info = urlopen(self.server.base_url)
+        self.assertTrue(info.headers['foo'] == 'bar')
+        self.assertEqual(info.read(), 'Hello')
+
+        self.server.response['post_callback'] = callback
+        info = urlopen(self.server.base_url, 'key=val')
+        self.assertTrue(info.headers['foo'] == 'bar')
+        self.assertEqual(info.read(), 'Hello')
+
+    def test_response_once_code(self):
+        info = urlopen(self.server.base_url)
+        self.assertEqual(info.getcode(), 200)
+
+        self.server.response_once['code'] = 403
+        info = urlopen(self.server.base_url)
+        self.assertEqual(info.getcode(), 403)
+
+        info = urlopen(self.server.base_url)
+        self.assertEqual(info.getcode(), 200)
+
+    def test_response_once_cookies(self):
+        self.server.response['cookies'] = {'foo': 'bar'}
+        info = urlopen(self.server.base_url)
+        self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
+
+        self.server.response_once['cookies'] = {'baz': 'gaz'}
+        info = urlopen(self.server.base_url)
+        self.assertFalse('foo=bar' in info.headers['Set-Cookie'])
+        self.assertTrue('baz=gaz' in info.headers['Set-Cookie'])
+
+        info = urlopen(self.server.base_url)
+        self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
+        self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
+
+    def test_response_content_callable(self):
+        self.server.response['get'] = lambda: 'Hello'
+        info = urlopen(self.server.base_url)
+        self.assertEqual(info.read(), 'Hello')
+
+    def test_timeout_iterator(self):
+        delays = (0.5, 0.3, 0.1)
+        self.server.timeout_iterator = iter(delays)
+
+        for delay in delays:
+            start = time.time()
+            info = urlopen(self.server.base_url)
+            elapsed = time.time() - start
+            self.assertTrue(elapsed > delay)
