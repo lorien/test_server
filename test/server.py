@@ -42,7 +42,7 @@ class TestTornadoServer(TestCase):
         data = urlopen(self.server.base_url, b'THE POST').read()
         self.assertEqual(data, self.server.response['post'])
 
-    def test_callback(self):
+    def test_callback_wtf(self):
         class ContentGenerator():
             def __init__(self):
                 self.count = 0
@@ -96,13 +96,13 @@ class TestTornadoServer(TestCase):
         delay = 0.3
 
         start = time.time()
-        info = urlopen(self.server.base_url)
+        urlopen(self.server.base_url)
         elapsed = time.time() - start
         self.assertFalse(elapsed > delay)
 
         self.server.sleep['get'] = delay
         start = time.time()
-        info = urlopen(self.server.base_url)
+        urlopen(self.server.base_url)
         elapsed = time.time() - start
         self.assertTrue(elapsed > delay)
 
@@ -158,6 +158,6 @@ class TestTornadoServer(TestCase):
 
         for delay in delays:
             start = time.time()
-            info = urlopen(self.server.base_url)
+            urlopen(self.server.base_url)
             elapsed = time.time() - start
             self.assertTrue(elapsed > delay)

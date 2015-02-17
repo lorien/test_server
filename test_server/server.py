@@ -112,8 +112,6 @@ class TestServer(object):
                                 self.add_header('Set-Cookie',
                                                 '%s=%s' % (key, val))
 
-
-
                     if SERVER.response_once['headers']:
                         while SERVER.response_once['headers']:
                             key, value = SERVER.response_once['headers'].pop()
