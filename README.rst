@@ -2,7 +2,7 @@
 Test-server
 ===========
 
-.. image:: https://travis-ci.org/lorien/test-server.png?branch=master
+.. image:: https://travis-ci.org/lorien/test_server.png?branch=master
     :target: https://travis-ci.org/lorien/test_server
 
 .. image:: https://coveralls.io/repos/lorien/test_server/badge.svg?branch=master
@@ -14,8 +14,8 @@ Test-server
 .. image:: https://pypip.in/version/test-server/badge.svg
     :target: https://pypi.python.org/pypi/test-server
 
-.. image:: https://landscape.io/github/lorien/test-server/master/landscape.png
-   :target: https://landscape.io/github/lorien/test-server/master
+.. image:: https://landscape.io/github/lorien/test_server/master/landscape.png
+   :target: https://landscape.io/github/lorien/test_server/master
 
 HTTP Server to test HTTP clients.
 
