@@ -5,36 +5,42 @@ try:
 except ImportError:
     from urllib.request import urlopen
 
-from test_server import SERVER, start_server, stop_server
-
+from test_server import TestServer
 
 class TestTornadoServer(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = TestServer()
+        cls.server.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.stop()
+
     def setUp(self):
-        start_server()
-        SERVER.reset()
+        self.server.reset()
 
     def tearDown(self):
-        stop_server()
-        time.sleep(0.5)
+        pass
 
     def test_get(self):
-        SERVER.RESPONSE['get'] = b'zorro'
-        data = urlopen(SERVER.BASE_URL).read()
-        self.assertEqual(data, SERVER.RESPONSE['get'])
+        self.server.response['get'] = b'zorro'
+        data = urlopen(self.server.base_url).read()
+        self.assertEqual(data, self.server.response['get'])
 
     def test_path(self):
-        urlopen(SERVER.BASE_URL + '/foo').read()
-        self.assertEqual(SERVER.REQUEST['path'], '/foo')
+        urlopen(self.server.base_url + '/foo').read()
+        self.assertEqual(self.server.request['path'], '/foo')
 
-        urlopen(SERVER.BASE_URL + '/foo?bar=1').read()
-        self.assertEqual(SERVER.REQUEST['path'], '/foo')
-        self.assertEqual(SERVER.REQUEST['args']['bar'], '1')
+        urlopen(self.server.base_url + '/foo?bar=1').read()
+        self.assertEqual(self.server.request['path'], '/foo')
+        self.assertEqual(self.server.request['args']['bar'], '1')
 
 
     def test_post(self):
-        SERVER.RESPONSE['post'] = b'foo'
-        data = urlopen(SERVER.BASE_URL, b'THE POST').read()
-        self.assertEqual(data, SERVER.RESPONSE['post'])
+        self.server.response['post'] = b'foo'
+        data = urlopen(self.server.base_url, b'THE POST').read()
+        self.assertEqual(data, self.server.response['post'])
 
     def test_callback(self):
         class ContentGenerator():
@@ -46,13 +52,13 @@ class TestTornadoServer(TestCase):
                 return 'foo'
 
         gen = ContentGenerator()
-        SERVER.RESPONSE['get'] = gen 
-        urlopen(SERVER.BASE_URL).read()
+        self.server.response['get'] = gen 
+        urlopen(self.server.base_url).read()
         self.assertEqual(gen.count, 1)
-        urlopen(SERVER.BASE_URL).read()
+        urlopen(self.server.base_url).read()
         self.assertEqual(gen.count, 2)
         # Now create POST request which should no be
         # processed with ContentGenerator which is bind to GET
         # requests
-        urlopen(SERVER.BASE_URL, b'some post').read()
+        urlopen(self.server.base_url, b'some post').read()
         self.assertEqual(gen.count, 2)

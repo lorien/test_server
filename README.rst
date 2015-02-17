@@ -32,16 +32,20 @@ Example:
         from urllib import urlopen
     except ImportError:
         from urllib.request import urlopen
-    from test_server import SERVER, start_server, stop_server
+    from test_server import TestServer
 
+    class UrllibTestCase(TestCase):
+        @classmethod
+        def setUpClass(cls):
+            cls.server = TestServer()
+            cls.server.start()
 
-    class UrlopenTestCase(TestCase):
+        @classmethod
+        def tearDownClass(cls):
+            cls.server.stop()
+
         def setUp(self):
-            start_server()
-            SERVER.reset()
-
-        def tearDown(self):
-            stop_server()
+            self.server.reset()
 
         def test_get(self):
             token = b'zorro'
