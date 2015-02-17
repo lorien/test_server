@@ -12,7 +12,7 @@ install:
   - python setup.py develop
 
 script:
-  - coverage run --source=APPMODULE -m runscript.cli test
+  - coverage run --source=test_server -m runscript.cli test
 
 after_success:
   coveralls
