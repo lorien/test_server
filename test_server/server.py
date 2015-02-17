@@ -4,6 +4,7 @@ import tornado.web
 import time
 import collections
 import tornado.gen
+from tornado.httpserver import HTTPServer
 
 __all__ = ('TestServer',)
 
@@ -59,6 +60,9 @@ class TestServer(object):
             self.response_once['headers'].pop()
 
     def get_handler(self):
+        """
+        Ok, ok, I know that this is f**g strange code.
+        """
         SERVER = self
 
         class MainHandler(tornado.web.RequestHandler):
@@ -68,6 +72,16 @@ class TestServer(object):
             @tornado.web.asynchronous
             @tornado.gen.engine
             def method_handler(self):
+                """
+                if '/::stop' in self.request.path:
+                    print '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1'
+                    self.write('')
+                    self.finish()
+                    print('done')
+                    loop = tornado.ioloop.IOLoop.instance()
+                    loop.add_callback(callback=loop.stop)
+                """
+
                 method_name = self.request.method.lower()
 
                 if SERVER.sleep.get(method_name, None):
@@ -152,42 +166,50 @@ class TestServer(object):
             patch = method_handler
             delete = method_handler
 
-        if self._handler is None:
+        if not self._handler:
             self._handler = MainHandler
-
         return self._handler
 
     def start(self):
-        handler = self.get_handler()
-
         def func():
             app1 = tornado.web.Application([
-                (r"^.*", handler),
+                (r"^.*", self.get_handler()),
             ])
-            app1._listen_port = self.port
-
             app2 = tornado.web.Application([
-                (r"^.*", handler),
+                (r"^.*", self.get_handler()),
             ])
-            app2._listen_port = self.extra_port1
-
             app3 = tornado.web.Application([
-                (r"^.*", handler),
+                (r"^.*", self.get_handler()),
             ])
+
+            app1._listen_port = self.port
+            app2._listen_port = self.extra_port1
             app3._listen_port = self.extra_port2
 
-            app1.listen(app1._listen_port)
-            app2.listen(app2._listen_port)
-            app3.listen(app3._listen_port)
+            server1 = HTTPServer(app1)
+            server1.listen(app1._listen_port, '')
+            print('Listening on port %d' % app1._listen_port)
 
-            loop = tornado.ioloop.IOLoop.instance()
-            self._loop = loop
-            loop.start()
+            server2 = HTTPServer(app2)
+            server2.listen(app2._listen_port, '')
+            print('Listening on port %d' % app2._listen_port)
 
-        th = Thread(target=func)
-        th.daemon = False
-        th.start()
+            server3 = HTTPServer(app3)
+            server3.listen(app3._listen_port, '')
+            print('Listening on port %d' % app3._listen_port)
+
+            tornado.ioloop.IOLoop.instance().start()
+            # manually close sockets
+            # to be able to creat anoterh HTTP servers
+            # on same sockets
+            for server in (server1, server2, server3):
+                for key in server._sockets:
+                    server._sockets[key].close()
+
+        self._thread = Thread(target=func)
+        self._thread.start()
         time.sleep(0.1)
 
     def stop(self):
-        self._loop.stop()
+        tornado.ioloop.IOLoop.instance().stop()
+        self._thread.join()

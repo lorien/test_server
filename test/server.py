@@ -9,7 +9,7 @@ import six
 from test_server import TestServer
 
 
-class TestTornadoServer(TestCase):
+class TestServerTestCase(TestCase):
     @classmethod
     def setUpClass(cls):
         cls.server = TestServer()
@@ -21,9 +21,6 @@ class TestTornadoServer(TestCase):
 
     def setUp(self):
         self.server.reset()
-
-    def tearDown(self):
-        pass
 
     def test_get(self):
         self.server.response['get'] = b'zorro'
@@ -166,3 +163,22 @@ class TestTornadoServer(TestCase):
             urlopen(self.server.base_url)
             elapsed = time.time() - start
             self.assertTrue(elapsed > delay)
+
+
+class TestServerMultStartStopTestCase(TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.server = TestServer()
+        cls.server.start()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.server.stop()
+
+    def setUp(self):
+        self.server.reset()
+
+    def test_basic(self):
+        self.server.response['get'] = b'zorro'
+        data = urlopen(self.server.base_url).read()
+        self.assertEqual(data, self.server.response['get'])
