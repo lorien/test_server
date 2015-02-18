@@ -10,12 +10,18 @@ from six.moves.urllib.parse import urljoin
 __all__ = ('TestServer',)
 
 
+class TestServerRuntimeError(Exception):
+    pass
+
+
 class TestServer(object):
     request = {}
     response = {}
     response_once = {'headers': []}
     sleep = {}
     timeout_iterator = None
+    methods = ('get', 'post', 'head', 'options', 'put', 'delete',
+               'patch', 'trace', 'connect')
 
     def __init__(self, port=9876, address='127.0.0.1', extra_ports=None):
         self.port = port
@@ -25,6 +31,26 @@ class TestServer(object):
         self._handler = None
         self._thread = None
 
+    def get_param(self, key, method='get', clear_once=True):
+        method_key = '%s.%s' % (method, key)
+        if method_key in self.response_once:
+            value = self.response_once[method_key]
+            if clear_once:
+                del self.response_once[method_key]
+            return value
+        elif key in self.response_once:
+            value = self.response_once[key]
+            if clear_once:
+                del self.response_once[key]
+            return value
+        elif method_key in self.response:
+            return self.response[method_key]
+        elif key in self.response:
+            return self.response[key]
+        else:
+            raise TestServerRuntimeError('Parameter %s does not exists in '
+                                         'server response data' % key)
+
     def reset(self):
         self.request.update({
             'args': {},
@@ -33,31 +59,18 @@ class TestServer(object):
             'path': None,
             'method': None,
             'charset': 'utf-8',
+            'data': None,
         })
-        self.response.update({
-            'get': '',
-            'post': '',
-            'cookies': None,
-            'headers': [],
+        self.response = {
             'code': 200,
-        })
+            'data': '',
+            'headers': [],
+            'cookies': [],
+            'callback': None,
+            'sleep': None,
+        }
 
-        for method in ('get', 'post', 'head', 'options', 'put', 'delete',
-                       'patch', 'trace', 'connect'):
-            self.response['%s_callback' % method] = None
-
-        self.response_once.update({
-            'get': None,
-            'post': None,
-            'code': None,
-            'cookies': None,
-        })
-        self.sleep.update({
-            'get': 0,
-            'post': 0,
-        })
-        for x in range(len(self.response_once['headers'])):
-            self.response_once['headers'].pop()
+        self.response_once = {}
 
     def get_handler(self):
         "Build tornado request handler that is used in HTTP server"
@@ -71,12 +84,12 @@ class TestServer(object):
             @tornado.web.asynchronous
             @tornado.gen.engine
             def method_handler(self):
-                method_name = self.request.method.lower()
+                method = self.request.method.lower()
 
-                if SERVER.sleep.get(method_name, None):
+                sleep = SERVER.get_param('sleep', method)
+                if sleep:
                     yield tornado.gen.Task(IOLoop.instance().add_timeout,
-                                           time.time() +
-                                           SERVER.sleep[method_name])
+                                           time.time() + sleep)
                 SERVER.request['args'] = {}
                 for key in self.request.arguments.keys():
                     SERVER.request['args'][key] = self.get_argument(key)
@@ -85,44 +98,23 @@ class TestServer(object):
                 SERVER.request['method'] = self.request.method
                 SERVER.request['cookies'] = self.request.cookies
                 charset = SERVER.request['charset']
-                SERVER.request['post'] = self.request.body
+                SERVER.request['data'] = self.request.body
 
-                callback_name = '%s_callback' % method_name
+                callback_name = '%s_callback' % method
                 if SERVER.response.get(callback_name) is not None:
                     SERVER.response[callback_name](self)
                 else:
                     headers_sent = set()
 
-                    if SERVER.response_once['code']:
-                        self.set_status(SERVER.response_once['code'])
-                        SERVER.response_once['code'] = None
-                    else:
-                        self.set_status(SERVER.response['code'])
+                    self.set_status(SERVER.get_param('code', method))
+                    for key, val in SERVER.get_param('cookies', method):
+                        # Set-Cookie: name=newvalue; expires=date;
+                        # path=/; domain=.example.org.
+                        self.add_header('Set-Cookie', '%s=%s' % (key, val))
 
-                    if SERVER.response_once['cookies']:
-                        for key, val in sorted(SERVER.response_once['cookies']
-                                                     .items()):
-                            # Set-Cookie: name=newvalue; expires=date;
-                            # path=/; domain=.example.org.
-                            self.add_header('Set-Cookie', '%s=%s' % (key, val))
-                        SERVER.response_once['cookies'] = None
-                    else:
-                        if SERVER.response['cookies']:
-                            for key, val in sorted(SERVER.response['cookies']
-                                                         .items()):
-                                # Set-Cookie: name=newvalue; expires=date;
-                                # path=/; domain=.example.org.
-                                self.add_header('Set-Cookie',
-                                                '%s=%s' % (key, val))
-
-                    if SERVER.response_once['headers']:
-                        while SERVER.response_once['headers']:
-                            key, value = SERVER.response_once['headers'].pop()
-                            self.set_header(key, value)
-                            headers_sent.add(key)
-                    else:
-                        for name, value in SERVER.response['headers']:
-                            self.set_header(name, value)
+                    for key, value in SERVER.get_param('headers', method):
+                        self.set_header(key, value)
+                        headers_sent.add(key)
 
                     self.set_header('Listen-Port',
                                     str(self.application.listen_port))
@@ -133,15 +125,11 @@ class TestServer(object):
                                         'text/html; charset=%s' % charset)
                         headers_sent.add('Content-Type')
 
-                    if SERVER.response_once.get(method_name) is not None:
-                        self.write(SERVER.response_once[method_name])
-                        SERVER.response_once[method_name] = None
+                    data = SERVER.get_param('data', method)
+                    if isinstance(data, collections.Callable):
+                        self.write(data())
                     else:
-                        resp = SERVER.response.get(method_name, '')
-                        if isinstance(resp, collections.Callable):
-                            self.write(resp())
-                        else:
-                            self.write(resp)
+                        self.write(data)
 
                     if SERVER.timeout_iterator:
                         yield tornado.gen.Task(IOLoop.instance().add_timeout,

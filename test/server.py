@@ -23,9 +23,9 @@ class ServerTestCase(TestCase):
         self.server.reset()
 
     def test_get(self):
-        self.server.response['get'] = b'zorro'
+        self.server.response['data'] = b'zorro'
         data = urlopen(self.server.get_url()).read()
-        self.assertEqual(data, self.server.response['get'])
+        self.assertEqual(data, self.server.response['data'])
 
     def test_path(self):
         urlopen(self.server.get_url('/foo')).read()
@@ -36,9 +36,9 @@ class ServerTestCase(TestCase):
         self.assertEqual(self.server.request['args']['bar'], '1')
 
     def test_post(self):
-        self.server.response['post'] = b'foo'
+        self.server.response['post.data'] = b'foo'
         data = urlopen(self.server.get_url(), b'THE POST').read()
-        self.assertEqual(data, self.server.response['post'])
+        self.assertEqual(data, self.server.response['post.data'])
 
     def test_callback_wtf(self):
         class ContentGenerator():
@@ -50,7 +50,7 @@ class ServerTestCase(TestCase):
                 return 'foo'
 
         gen = ContentGenerator()
-        self.server.response['get'] = gen
+        self.server.response['get.data'] = gen
         urlopen(self.server.get_url()).read()
         self.assertEqual(gen.count, 1)
         urlopen(self.server.get_url()).read()
@@ -62,10 +62,10 @@ class ServerTestCase(TestCase):
         self.assertEqual(gen.count, 2)
 
     def test_response_once_get(self):
-        self.server.response['get'] = b'base'
+        self.server.response['data'] = b'base'
         self.assertEquals(b'base', urlopen(self.server.get_url()).read())
 
-        self.server.response_once['get'] = b'tmp'
+        self.server.response_once['data'] = b'tmp'
         self.assertEquals(b'tmp', urlopen(self.server.get_url()).read())
 
         self.assertEquals(b'base', urlopen(self.server.get_url()).read())
@@ -98,7 +98,7 @@ class ServerTestCase(TestCase):
         elapsed = time.time() - start
         self.assertFalse(elapsed > delay)
 
-        self.server.sleep['get'] = delay
+        self.server.response['sleep'] = delay
         start = time.time()
         urlopen(self.server.get_url())
         elapsed = time.time() - start
@@ -136,11 +136,11 @@ class ServerTestCase(TestCase):
         self.assertEqual(info.getcode(), 200)
 
     def test_response_once_cookies(self):
-        self.server.response['cookies'] = {'foo': 'bar'}
+        self.server.response['cookies'] = [('foo', 'bar')]
         info = urlopen(self.server.get_url())
         self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
 
-        self.server.response_once['cookies'] = {'baz': 'gaz'}
+        self.server.response_once['cookies'] = [('baz', 'gaz')]
         info = urlopen(self.server.get_url())
         self.assertFalse('foo=bar' in info.headers['Set-Cookie'])
         self.assertTrue('baz=gaz' in info.headers['Set-Cookie'])
@@ -150,7 +150,7 @@ class ServerTestCase(TestCase):
         self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
 
     def test_response_content_callable(self):
-        self.server.response['get'] = lambda: b'Hello'
+        self.server.response['data'] = lambda: b'Hello'
         info = urlopen(self.server.get_url())
         self.assertEqual(info.read(), b'Hello')
 
@@ -179,9 +179,9 @@ class ServerMultStartStopTestCase(TestCase):
         self.server.reset()
 
     def test_basic(self):
-        self.server.response['get'] = b'zorro'
+        self.server.response['data'] = b'zorro'
         data = urlopen(self.server.get_url()).read()
-        self.assertEqual(data, self.server.response['get'])
+        self.assertEqual(data, self.server.response['data'])
 
 
 class ExtraPortsTestCase(TestCase):
@@ -201,7 +201,7 @@ class ExtraPortsTestCase(TestCase):
         self.server.reset()
 
     def test_basic(self):
-        self.server.response['get'] = b'zorro'
+        self.server.response['data'] = b'zorro'
         for port in [self.port] + self.extra_ports:
             data = urlopen(self.server.get_url(port=port)).read()
-            self.assertEqual(data, self.server.response['get'])
+            self.assertEqual(data, self.server.response['data'])
