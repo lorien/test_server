@@ -19,4 +19,7 @@ clean:
 upload:
 	python setup.py sdist upload
 
+pylint:
+	pylint --reports=n script test test_server
+
 .PHONY: all build venv flake test vtest testloop cov clean doc

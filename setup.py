@@ -10,7 +10,7 @@ setup(
     long_description = open(os.path.join(ROOT, 'README.rst')).read(),
     author = 'Gregory Petukhov',
     author_email = 'lorien@lorien.name',
-    install_requires = ['tornado'],
+    install_requires = ['tornado', 'six'],
     packages = ['test_server', 'script', 'test'],
     license = "MIT",
     classifiers = (

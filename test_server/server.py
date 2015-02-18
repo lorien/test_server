@@ -5,27 +5,27 @@ import time
 import collections
 import tornado.gen
 from tornado.httpserver import HTTPServer
+from six.moves.urllib.parse import urljoin
 
 __all__ = ('TestServer',)
 
 
 class TestServer(object):
-    port = 9876
-    extra_port1 = 9877
-    extra_port2 = 9878
-    base_url = None
     request = {}
     response = {}
     response_once = {'headers': []}
     sleep = {}
     timeout_iterator = None
 
-    def __init__(self):
+    def __init__(self, port=9876, address='127.0.0.1', extra_ports=None):
+        self.port = port
+        self.address = address
+        self.extra_ports = list(extra_ports or [])
         self.reset()
         self._handler = None
+        self._thread = None
 
     def reset(self):
-        self.base_url = 'http://localhost:%d' % self.port
         self.request.update({
             'args': {},
             'headers': {},
@@ -60,28 +60,17 @@ class TestServer(object):
             self.response_once['headers'].pop()
 
     def get_handler(self):
-        """
-        Ok, ok, I know that this is f**g strange code.
-        """
+        "Build tornado request handler that is used in HTTP server"
         SERVER = self
 
         class MainHandler(tornado.web.RequestHandler):
             def decode_argument(self, value, **kwargs):
+                # pylint: disable=unused-argument
                 return value.decode(SERVER.request['charset'])
 
             @tornado.web.asynchronous
             @tornado.gen.engine
             def method_handler(self):
-                """
-                if '/::stop' in self.request.path:
-                    print '!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!1'
-                    self.write('')
-                    self.finish()
-                    print('done')
-                    loop = tornado.ioloop.IOLoop.instance()
-                    loop.add_callback(callback=loop.stop)
-                """
-
                 method_name = self.request.method.lower()
 
                 if SERVER.sleep.get(method_name, None):
@@ -136,7 +125,7 @@ class TestServer(object):
                             self.set_header(name, value)
 
                     self.set_header('Listen-Port',
-                                    str(self.application._listen_port))
+                                    str(self.application.listen_port))
 
                     if 'Content-Type' not in headers_sent:
                         charset = 'utf-8'
@@ -170,46 +159,52 @@ class TestServer(object):
             self._handler = MainHandler
         return self._handler
 
+    def _build_web_app(self):
+        """Build tornado web application that is served by
+        HTTP server"""
+        return tornado.web.Application([
+            (r"^.*", self.get_handler()),
+        ])
+
+    def main_loop_function(self):
+        """This is function that is executed in separate thread:
+         * start HTTP server
+         * start tornado loop"""
+        ports = [self.port] + self.extra_ports
+        servers = []
+        for port in ports:
+            app = self._build_web_app()
+            app.listen_port = port
+            server = HTTPServer(app)
+            server.listen(port, self.address)
+            print('Listening on port %d' % port)
+            servers.append(server)
+
+        tornado.ioloop.IOLoop.instance().start()
+
+        # manually close sockets
+        # to be able to create other HTTP servers
+        # on same sockets
+        for server in servers:
+            # pylint: disable=protected-access
+            for socket in server._sockets.values():
+                socket.close()
+
     def start(self):
-        def func():
-            app1 = tornado.web.Application([
-                (r"^.*", self.get_handler()),
-            ])
-            app2 = tornado.web.Application([
-                (r"^.*", self.get_handler()),
-            ])
-            app3 = tornado.web.Application([
-                (r"^.*", self.get_handler()),
-            ])
+        """Create new thread with tornado loop and start there
+        HTTP server."""
 
-            app1._listen_port = self.port
-            app2._listen_port = self.extra_port1
-            app3._listen_port = self.extra_port2
-
-            server1 = HTTPServer(app1)
-            server1.listen(app1._listen_port, '')
-            print('Listening on port %d' % app1._listen_port)
-
-            server2 = HTTPServer(app2)
-            server2.listen(app2._listen_port, '')
-            print('Listening on port %d' % app2._listen_port)
-
-            server3 = HTTPServer(app3)
-            server3.listen(app3._listen_port, '')
-            print('Listening on port %d' % app3._listen_port)
-
-            tornado.ioloop.IOLoop.instance().start()
-            # manually close sockets
-            # to be able to creat anoterh HTTP servers
-            # on same sockets
-            for server in (server1, server2, server3):
-                for key in server._sockets:
-                    server._sockets[key].close()
-
-        self._thread = Thread(target=func)
+        self._thread = Thread(target=self.main_loop_function)
         self._thread.start()
         time.sleep(0.1)
 
     def stop(self):
+        "Stop tornado loop and wait for thread finished it work"
         tornado.ioloop.IOLoop.instance().stop()
         self._thread.join()
+
+    def get_url(self, extra='', port=None):
+        "Build URL that is served by HTTP server"
+        if port is None:
+            port = self.port
+        return urljoin('http://%s:%d/' % (self.address, port), extra)
