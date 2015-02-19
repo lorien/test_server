@@ -100,9 +100,9 @@ class TestServer(object):
                 charset = SERVER.request['charset']
                 SERVER.request['data'] = self.request.body
 
-                callback_name = '%s_callback' % method
-                if SERVER.response.get(callback_name) is not None:
-                    SERVER.response[callback_name](self)
+                callback = SERVER.get_param('callback', method)
+                if callback:
+                    callback(self)
                 else:
                     headers_sent = set()
 

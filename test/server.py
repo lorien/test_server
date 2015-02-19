@@ -105,19 +105,24 @@ class ServerTestCase(TestCase):
         self.assertTrue(elapsed > delay)
 
     def test_callback(self):
-        def callback(self):
-            self.set_header('foo', 'bar')
+        def get_callback(self):
+            self.set_header('method', 'get')
             self.write(b'Hello')
             self.finish()
 
-        self.server.response['get_callback'] = callback
+        def post_callback(self):
+            self.set_header('method', 'post')
+            self.write(b'Hello')
+            self.finish()
+
+        self.server.response['callback'] = get_callback
         info = urlopen(self.server.get_url())
-        self.assertTrue(info.headers['foo'] == 'bar')
+        self.assertTrue(info.headers['method'] == 'get')
         self.assertEqual(info.read(), b'Hello')
 
-        self.server.response['post_callback'] = callback
+        self.server.response['post.callback'] = post_callback
         info = urlopen(self.server.get_url(), b'key=val')
-        self.assertTrue(info.headers['foo'] == 'bar')
+        self.assertTrue(info.headers['method'] == 'post')
         self.assertEqual(info.read(), b'Hello')
 
     def test_response_once_code(self):
