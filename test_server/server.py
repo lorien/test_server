@@ -6,12 +6,11 @@ import collections
 import tornado.gen
 from tornado.httpserver import HTTPServer
 from six.moves.urllib.parse import urljoin
+import six
+
+from test_server.error import TestServerRuntimeError
 
 __all__ = ('TestServer',)
-
-
-class TestServerRuntimeError(Exception):
-    pass
 
 
 class TestServer(object):
@@ -104,37 +103,58 @@ class TestServer(object):
                 if callback:
                     callback(self)
                 else:
-                    headers_sent = set()
+                    response = {
+                        'code': None,
+                        'headers': [],
+                        'data': None,
+                    }
 
-                    self.set_status(SERVER.get_param('code', method))
+                    response['code'] = SERVER.get_param('code', method)
+
                     for key, val in SERVER.get_param('cookies', method):
                         # Set-Cookie: name=newvalue; expires=date;
                         # path=/; domain=.example.org.
-                        self.add_header('Set-Cookie', '%s=%s' % (key, val))
+                        response['headers'].append(
+                            ('Set-Cookie', '%s=%s' % (key, val)))
 
                     for key, value in SERVER.get_param('headers', method):
-                        self.set_header(key, value)
-                        headers_sent.add(key)
+                        response['headers'].append((key, value))
 
-                    self.set_header('Listen-Port',
-                                    str(self.application.listen_port))
+                    response['headers'].append(
+                        ('Listen-Port', str(self.application.listen_port)))
 
-                    if 'Content-Type' not in headers_sent:
+                    header_keys = [x[0] for x in response['headers']]
+                    if 'Content-Type' not in header_keys:
                         charset = 'utf-8'
-                        self.set_header('Content-Type',
-                                        'text/html; charset=%s' % charset)
-                        headers_sent.add('Content-Type')
+                        response['headers'].append(
+                            ('Content-Type',
+                             'text/html; charset=%s' % charset))
 
                     data = SERVER.get_param('data', method)
-                    if isinstance(data, collections.Callable):
-                        self.write(data())
+                    if isinstance(data, six.string_types):
+                        response['data'] = data
+                    elif isinstance(data, six.binary_type):
+                        response['data'] = data
+                    elif isinstance(data, collections.Iterable):
+                        try:
+                            response['data'] = next(data)
+                        except StopIteration:
+                            response['code'] = 405
+                            response['data'] = b''
                     else:
-                        self.write(data)
+                        raise TestServerRuntimeError('Data parameter should '
+                                                     'be string or iterable '
+                                                     'object')
 
                     if SERVER.timeout_iterator:
                         yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                                time.time() +
                                                next(SERVER.timeout_iterator))
+
+                    self.set_status(response['code'])
+                    for key, val in response['headers']:
+                        self.add_header(key, val)
+                    self.write(response['data'])
                     self.finish()
 
             get = method_handler

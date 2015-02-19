@@ -1,10 +1,7 @@
 from unittest import TestCase
-try:
-    from urllib import urlopen
-except ImportError:
-    from urllib.request import urlopen
+from six.moves.urllib.request import urlopen
+from six.moves.urllib.error import HTTPError
 import time
-import six
 
 from test_server import TestServer
 
@@ -40,14 +37,19 @@ class ServerTestCase(TestCase):
         data = urlopen(self.server.get_url(), b'THE POST').read()
         self.assertEqual(data, self.server.response['post.data'])
 
-    def test_callback_wtf(self):
-        class ContentGenerator():
+    def test_data_iterator(self):
+        class ContentGenerator(object):
             def __init__(self):
                 self.count = 0
 
-            def __call__(self):
+            def __iter__(self):
+                return self
+
+            def next(self):
                 self.count += 1
                 return 'foo'
+
+            __next__ = next
 
         gen = ContentGenerator()
         self.server.response['get.data'] = gen
@@ -60,6 +62,16 @@ class ServerTestCase(TestCase):
         # requests
         urlopen(self.server.get_url(), b'some post').read()
         self.assertEqual(gen.count, 2)
+
+    def test_data_generator(self):
+        def gen():
+            yield b'one'
+            yield b'two'
+
+        self.server.response['get.data'] = gen()
+        self.assertEquals(b'one', urlopen(self.server.get_url()).read())
+        self.assertEquals(b'two', urlopen(self.server.get_url()).read())
+        self.assertRaises(HTTPError, urlopen, self.server.get_url())
 
     def test_response_once_get(self):
         self.server.response['data'] = b'base'
@@ -130,12 +142,7 @@ class ServerTestCase(TestCase):
         self.assertEqual(info.getcode(), 200)
 
         self.server.response_once['code'] = 403
-        if six.PY2:
-            info = urlopen(self.server.get_url())
-            self.assertEqual(info.getcode(), 403)
-        else:
-            from urllib.error import HTTPError
-            self.assertRaises(HTTPError, urlopen, self.server.get_url())
+        self.assertRaises(HTTPError, urlopen, self.server.get_url())
 
         info = urlopen(self.server.get_url())
         self.assertEqual(info.getcode(), 200)
@@ -153,11 +160,6 @@ class ServerTestCase(TestCase):
         info = urlopen(self.server.get_url())
         self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
         self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
-
-    def test_response_content_callable(self):
-        self.server.response['data'] = lambda: b'Hello'
-        info = urlopen(self.server.get_url())
-        self.assertEqual(info.read(), b'Hello')
 
     def test_timeout_iterator(self):
         delays = (0.5, 0.3, 0.1)
