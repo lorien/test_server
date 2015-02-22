@@ -4,6 +4,7 @@ from six.moves.urllib.error import HTTPError
 import time
 
 from test_server import TestServer
+import test_server
 
 
 class ServerTestCase(TestCase):
@@ -170,6 +171,30 @@ class ServerTestCase(TestCase):
             urlopen(self.server.get_url())
             elapsed = time.time() - start
             self.assertTrue(elapsed > delay)
+
+    def test_default_header_content_type(self):
+        info = urlopen(self.server.get_url())
+        self.assertEquals(info.headers['content-type'],
+                          'text/html; charset=UTF-8')
+
+    def test_custom_header_content_type(self):
+        self.server.response['headers'] = [
+            ('Content-Type', 'text/html; charset=koi8-r')]
+        info = urlopen(self.server.get_url())
+        self.assertEquals(info.headers['content-type'],
+                          'text/html; charset=koi8-r')
+
+    def test_default_header_server(self):
+        info = urlopen(self.server.get_url())
+        self.assertEquals(info.headers['server'],
+                          'TestServer/%s' % test_server.version)
+
+    def test_custom_header_server(self):
+        self.server.response['headers'] = [
+            ('Server', 'Google')]
+        info = urlopen(self.server.get_url())
+        self.assertEquals(info.headers['server'], 'Google')
+
 
 
 class ServerMultStartStopTestCase(TestCase):

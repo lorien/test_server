@@ -9,6 +9,7 @@ from six.moves.urllib.parse import urljoin
 import six
 
 from test_server.error import TestServerRuntimeError
+import test_server
 
 __all__ = ('TestServer',)
 
@@ -57,7 +58,7 @@ class TestServer(object):
             'cookies': None,
             'path': None,
             'method': None,
-            'charset': 'utf-8',
+            'charset': 'UTF-8',
             'data': None,
         })
         self.response = {
@@ -83,6 +84,11 @@ class TestServer(object):
             @tornado.web.asynchronous
             @tornado.gen.engine
             def method_handler(self):
+                # Remove some standard tornado headers
+                for key in ('Content-Type', 'Server'):
+                    if key in self._headers:
+                        del self._headers[key]
+
                 method = self.request.method.lower()
 
                 sleep = SERVER.get_param('sleep', method)
@@ -123,13 +129,6 @@ class TestServer(object):
                     response['headers'].append(
                         ('Listen-Port', str(self.application.listen_port)))
 
-                    header_keys = [x[0] for x in response['headers']]
-                    if 'Content-Type' not in header_keys:
-                        charset = 'utf-8'
-                        response['headers'].append(
-                            ('Content-Type',
-                             'text/html; charset=%s' % charset))
-
                     data = SERVER.get_param('data', method)
                     if isinstance(data, six.string_types):
                         response['data'] = data
@@ -150,6 +149,15 @@ class TestServer(object):
                         yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                                time.time() +
                                                next(SERVER.timeout_iterator))
+
+                    header_keys = [x[0].lower() for x in response['headers']]
+                    if 'content-type' not in header_keys:
+                        response['headers'].append(
+                            ('Content-Type',
+                             'text/html; charset=%s' % charset))
+                    if 'server' not in header_keys:
+                        response['headers'].append(
+                            ('Server', 'TestServer/%s' % test_server.version))
 
                     self.set_status(response['code'])
                     for key, val in response['headers']:
