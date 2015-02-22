@@ -1,3 +1,3 @@
 from test_server.server import *  # noqa
 
-version = '0.0.9'
+version = '0.0.10'
