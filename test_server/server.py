@@ -60,6 +60,7 @@ class TestServer(object):
             'method': None,
             'charset': 'UTF-8',
             'data': None,
+            'files': {},
         })
         self.response = {
             'code': 200,
@@ -104,6 +105,7 @@ class TestServer(object):
                 SERVER.request['cookies'] = self.request.cookies
                 charset = SERVER.request['charset']
                 SERVER.request['data'] = self.request.body
+                SERVER.request['files'] = self.request.files
 
                 callback = SERVER.get_param('callback', method)
                 if callback:
