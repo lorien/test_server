@@ -207,7 +207,6 @@ class TestServer(object):
             # pylint: disable=protected-access
             server.stop()
 
-
     def start(self):
         """Create new thread with tornado loop and start there
         HTTP server."""
