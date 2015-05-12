@@ -205,8 +205,8 @@ class TestServer(object):
         # on same sockets
         for server in servers:
             # pylint: disable=protected-access
-            for socket in server._sockets.values():
-                socket.close()
+            server.close()
+
 
     def start(self):
         """Create new thread with tornado loop and start there
