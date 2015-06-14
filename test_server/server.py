@@ -7,6 +7,7 @@ import tornado.gen
 from tornado.httpserver import HTTPServer
 from six.moves.urllib.parse import urljoin
 import six
+import urllib
 
 from test_server.error import TestServerRuntimeError
 import test_server
@@ -194,34 +195,76 @@ class TestServer(object):
             app = self._build_web_app()
             app.listen_port = port
             server = HTTPServer(app)
-            server.listen(port, self.address)
+
+            try_limit = 10
+            try_pause = 0.1
+            for x in range(try_limit):
+                try:
+                    server.listen(port, self.address)
+                except OSError:
+                    if x == (try_limit - 1):
+                        raise
+                    else:
+                        logging.debug('Socket %s:%d is busy, '
+                                      'waiting %.2f seconds.'
+                                      % (self.address, self.port, try_pause))
+                        time.sleep(0.1)
+                else:
+                    break
+
             print('Listening on port %d' % port)
             servers.append(server)
 
-        tornado.ioloop.IOLoop.instance().start()
-
-        # manually close sockets
-        # to be able to create other HTTP servers
-        # on same sockets
-        for server in servers:
-            # pylint: disable=protected-access
-            server.stop()
+        try:
+            tornado.ioloop.IOLoop.instance().start()
+        finally:
+            # manually close sockets
+            # to be able to create other HTTP servers
+            # on same sockets
+            for server in servers:
+                # pylint: disable=protected-access
+                server.stop()
 
     def start(self):
         """Create new thread with tornado loop and start there
         HTTP server."""
 
+        self.is_stopped = False
         self._thread = Thread(target=self.main_loop_function)
         self._thread.start()
-        time.sleep(0.1)
+
+        try_limit = 10
+        try_pause = 0.05
+        for x in range(try_limit):
+            try:
+                urllib.urlopen(self.get_url())
+            except Exception as ex:
+                if x == (try_limit - 1):
+                    raise
+                else:
+                    time.sleep(try_pause)
+            else:
+                break
 
     def stop(self):
         "Stop tornado loop and wait for thread finished it work"
         tornado.ioloop.IOLoop.instance().stop()
         self._thread.join()
+        self.is_stopped = True
 
     def get_url(self, extra='', port=None):
         "Build URL that is served by HTTP server"
         if port is None:
             port = self.port
         return urljoin('http://%s:%d/' % (self.address, port), extra)
+
+
+if __name__ == '__main__':
+    server = TestServer()
+    server.response['data'] = 'home page'
+    server.start()
+    try:
+        while not server.is_stopped:
+            time.sleep(0.1)
+    except KeyboardInterrupt:
+        server.stop()

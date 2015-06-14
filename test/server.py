@@ -216,6 +216,18 @@ class ServerMultStartStopTestCase(TestCase):
         self.assertEqual(data, self.server.response['data'])
 
 
+class ServerMultiStartStopTestCase(TestCase):
+    def test_multiple_start_stop_cycles(self):
+        for x in range(30):
+            server = TestServer()
+            server.start()
+            server.response['data'] = b'zorro'
+            for y in range(10):
+                data = urlopen(server.get_url()).read()
+                self.assertEqual(data, server.response['data'])
+            server.stop()
+
+
 class ExtraPortsTestCase(TestCase):
     port = 9876
     extra_ports = [9875, 9874]
