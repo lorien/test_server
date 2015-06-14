@@ -7,7 +7,8 @@ import tornado.gen
 from tornado.httpserver import HTTPServer
 from six.moves.urllib.parse import urljoin
 import six
-import urllib
+from six.moves.urllib.request import urlopen
+import logging
 
 from test_server.error import TestServerRuntimeError
 import test_server
@@ -237,7 +238,7 @@ class TestServer(object):
         try_pause = 0.05
         for x in range(try_limit):
             try:
-                urllib.urlopen(self.get_url())
+                urlopen(self.get_url()).read()
             except Exception as ex:
                 if x == (try_limit - 1):
                     raise
