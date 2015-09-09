@@ -174,6 +174,7 @@ class TestServer(object):
             put = method_handler
             patch = method_handler
             delete = method_handler
+            options = method_handler
 
         if not self._handler:
             self._handler = MainHandler

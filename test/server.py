@@ -1,5 +1,5 @@
 from unittest import TestCase
-from six.moves.urllib.request import urlopen
+from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.error import HTTPError
 import time
 
@@ -194,6 +194,23 @@ class ServerTestCase(TestCase):
             ('Server', 'Google')]
         info = urlopen(self.server.get_url())
         self.assertEquals(info.headers['server'], 'Google')
+
+    def test_options_method(self):
+        self.server.response['data'] = b'abc'
+
+        class RequestWithMethod(Request):
+            def __init__(self, method, *args, **kwargs):
+                self._method = method
+                Request.__init__(self, *args, **kwargs)
+  
+            def get_method(self):
+                return self._method
+
+        req = RequestWithMethod(url=self.server.get_url(),
+                                method='OPTIONS')
+        info = urlopen(req)
+        self.assertEqual('OPTIONS', self.server.request['method'])
+        self.assertEqual(b'abc', self.server.response['data'])
 
 
 
