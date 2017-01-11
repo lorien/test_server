@@ -9,6 +9,7 @@ from six.moves.urllib.parse import urljoin
 import six
 from six.moves.urllib.request import urlopen
 import logging
+import types
 
 from test_server.error import TestServerRuntimeError
 import test_server
@@ -111,7 +112,19 @@ class TestServer(object):
 
                 callback = SERVER.get_param('callback', method)
                 if callback:
-                    callback(self)
+                    call = callback(self)
+                    if isinstance(call, types.GeneratorType):
+                        for item in call:
+                            if isinstance(item, dict):
+                                assert 'type' in item
+                                assert item['type'] in ('sleep',)
+                                if item['type'] == 'sleep':
+                                    yield tornado.gen.Task(
+                                        IOLoop.instance().add_timeout,
+                                        time.time() + item['time'],
+                                    )
+                            else:
+                                yield item
                 else:
                     response = {
                         'code': None,

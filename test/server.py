@@ -138,6 +138,19 @@ class ServerTestCase(TestCase):
         self.assertTrue(info.headers['method'] == 'post')
         self.assertEqual(info.read(), b'Hello')
 
+    def test_callback_yield_(self):
+        def callback(self):
+            self.set_header('method', 'get')
+            self.write(b'Hello')
+            yield {'type': 'sleep', 'time': 0.0001}
+            self.write(b'World')
+
+            self.finish()
+
+        self.server.response['callback'] = callback
+        info = urlopen(self.server.get_url())
+        self.assertEqual(info.read(), b'HelloWorld')
+
     def test_response_once_code(self):
         info = urlopen(self.server.get_url())
         self.assertEqual(info.getcode(), 200)
