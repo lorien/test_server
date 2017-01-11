@@ -13,7 +13,7 @@ setup(
     install_requires = ['tornado', 'six'],
     packages = ['test_server', 'script', 'test'],
     license = "MIT",
-    classifiers = (
+    classifiers = [
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.4',
@@ -21,5 +21,5 @@ setup(
         'License :: OSI Approved :: MIT License',
         'Topic :: Software Development :: Libraries :: Application Frameworks',
         'Topic :: Software Development :: Libraries :: Python Modules',
-    ),
+    ],
 )
