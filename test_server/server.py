@@ -240,12 +240,13 @@ class TestServer(object):
                 # pylint: disable=protected-access
                 server.stop()
 
-    def start(self):
+    def start(self, daemon=True):
         """Create new thread with tornado loop and start there
         HTTP server."""
 
         self.is_stopped = False
         self._thread = Thread(target=self.main_loop_function)
+        self._thread.daemon = daemon
         self._thread.start()
 
         try_limit = 10
