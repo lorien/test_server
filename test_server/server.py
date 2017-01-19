@@ -64,6 +64,7 @@ class TestServer(object):
             'charset': 'UTF-8',
             'data': None,
             'files': {},
+            'client_ip': None,
         })
         self.response = {
             'code': 200,
@@ -99,6 +100,7 @@ class TestServer(object):
                 if sleep:
                     yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                            time.time() + sleep)
+                SERVER.request['client_ip'] = self.request.remote_ip
                 SERVER.request['args'] = {}
                 for key in self.request.arguments.keys():
                     SERVER.request['args'][key] = self.get_argument(key)

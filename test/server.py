@@ -25,6 +25,10 @@ class ServerTestCase(TestCase):
         data = urlopen(self.server.get_url()).read()
         self.assertEqual(data, self.server.response['data'])
 
+    def test_request_client_ip(self):
+        urlopen(self.server.get_url()).read()
+        self.assertEqual(self.server.address, self.server.request['client_ip'])
+
     def test_path(self):
         urlopen(self.server.get_url('/foo')).read()
         self.assertEqual(self.server.request['path'], '/foo')
