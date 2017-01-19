@@ -2,19 +2,20 @@
 # coding: utf-8
 import unittest
 import sys
+from argparse import ArgumentParser
 
 TEST_LIST = (
     'test.server',
 )
 
 
-def setup_arg_parser(parser):
+def main():
+    parser = ArgumentParser()
     parser.add_argument('-t', '--test-only', help='Run only specified tests')
+    opts = parser.parse_args()
 
-
-def main(test_only, **kwargs):
-    if test_only:
-        test_list = [test_only]
+    if opts.test_only:
+        test_list = [opts.test_only]
     else:
         test_list = TEST_LIST
 
@@ -38,3 +39,7 @@ def main(test_only, **kwargs):
         sys.exit(0)
     else:
         sys.exit(1)
+
+
+if __name__ == '__main__':
+    main()
