@@ -22,7 +22,6 @@ class TestServer(object):
     response = {}
     response_once = {'headers': []}
     sleep = {}
-    timeout_iterator = None
     methods = ('get', 'post', 'head', 'options', 'put', 'delete',
                'patch', 'trace', 'connect')
 
@@ -163,11 +162,6 @@ class TestServer(object):
                         raise TestServerRuntimeError('Data parameter should '
                                                      'be string or iterable '
                                                      'object')
-
-                    if SERVER.timeout_iterator:
-                        yield tornado.gen.Task(IOLoop.instance().add_timeout,
-                                               time.time() +
-                                               next(SERVER.timeout_iterator))
 
                     header_keys = [x[0].lower() for x in response['headers']]
                     if 'content-type' not in header_keys:

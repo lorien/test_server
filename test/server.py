@@ -179,16 +179,6 @@ class ServerTestCase(TestCase):
         self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
         self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
 
-    def test_timeout_iterator(self):
-        delays = (0.5, 0.3, 0.1)
-        self.server.timeout_iterator = iter(delays)
-
-        for delay in delays:
-            start = time.time()
-            urlopen(self.server.get_url())
-            elapsed = time.time() - start
-            self.assertTrue(elapsed > delay)
-
     def test_default_header_content_type(self):
         info = urlopen(self.server.get_url())
         self.assertEquals(info.headers['content-type'],
