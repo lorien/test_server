@@ -16,15 +16,148 @@ import test_server
 
 __all__ = ('TestServer',)
 
+CONFIG = { 
+    'request': {},
+    'response': {},
+    'response_once': {},
+}
+
+class TestServerRequestHandler(tornado.web.RequestHandler):
+    def initialize(self, test_server):
+        self._test_server = test_server
+
+    def get_param(self, key, method='get', clear_once=True):
+        method_key = '%s.%s' % (method, key)
+        if method_key in CONFIG['response_once']:
+            value = CONFIG['response_once'][method_key]
+            if clear_once:
+                del CONFIG['response_once'][method_key]
+            return value
+        elif key in CONFIG['response_once']:
+            value = CONFIG['response_once'][key]
+            if clear_once:
+                del CONFIG['response_once'][key]
+            return value
+        elif method_key in CONFIG['response']:
+            return CONFIG['response'][method_key]
+        elif key in CONFIG['response']:
+            return CONFIG['response'][key]
+        else:
+            raise TestServerRuntimeError('Parameter %s does not exists in '
+                                         'server response data' % key)
+
+    def decode_argument(self, value, **kwargs):
+        # pylint: disable=unused-argument
+        return value.decode(CONFIG['request']['charset'])
+
+    @tornado.web.asynchronous
+    @tornado.gen.engine
+    def request_handler(self):
+        # Remove some standard tornado headers
+        for key in ('Content-Type', 'Server'):
+            if key in self._headers:
+                del self._headers[key]
+
+        method = self.request.method.lower()
+
+        sleep = self.get_param('sleep', method)
+        if sleep:
+            yield tornado.gen.Task(IOLoop.instance().add_timeout,
+                                   time.time() + sleep)
+        CONFIG['request']['client_ip'] = self.request.remote_ip
+        CONFIG['request']['args'] = {}
+        for key in self.request.arguments.keys():
+            CONFIG['request']['args'][key] = self.get_argument(key)
+        CONFIG['request']['headers'] = self.request.headers
+        CONFIG['request']['path'] = self.request.path
+        CONFIG['request']['method'] = self.request.method
+        CONFIG['request']['cookies'] = self.request.cookies
+        charset = CONFIG['request']['charset']
+        CONFIG['request']['data'] = self.request.body
+        CONFIG['request']['files'] = self.request.files
+
+        callback = self.get_param('callback', method)
+        if callback:
+            call = callback(self)
+            if isinstance(call, types.GeneratorType):
+                for item in call:
+                    if isinstance(item, dict):
+                        assert 'type' in item
+                        assert item['type'] in ('sleep',)
+                        if item['type'] == 'sleep':
+                            yield tornado.gen.Task(
+                                IOLoop.instance().add_timeout,
+                                time.time() + item['time'],
+                            )
+                    else:
+                        yield item
+        else:
+            response = {
+                'code': None,
+                'headers': [],
+                'data': None,
+            }
+
+            response['code'] = self.get_param('code', method)
+
+            for key, val in self.get_param('cookies', method):
+                # Set-Cookie: name=newvalue; expires=date;
+                # path=/; domain=.example.org.
+                response['headers'].append(
+                    ('Set-Cookie', '%s=%s' % (key, val)))
+
+            for key, value in self.get_param('headers', method):
+                response['headers'].append((key, value))
+
+            response['headers'].append(
+                ('Listen-Port', str(self.application.listen_port)))
+
+            data = self.get_param('data', method)
+            if isinstance(data, six.string_types):
+                response['data'] = data
+            elif isinstance(data, six.binary_type):
+                response['data'] = data
+            elif isinstance(data, collections.Iterable):
+                try:
+                    response['data'] = next(data)
+                except StopIteration:
+                    response['code'] = 405
+                    response['data'] = b''
+            else:
+                raise TestServerRuntimeError('Data parameter should '
+                                             'be string or iterable '
+                                             'object')
+
+            header_keys = [x[0].lower() for x in response['headers']]
+            if 'content-type' not in header_keys:
+                response['headers'].append(
+                    ('Content-Type',
+                     'text/html; charset=%s' % charset))
+            if 'server' not in header_keys:
+                response['headers'].append(
+                    ('Server', 'TestServer/%s' % test_server.version))
+
+            self.set_status(response['code'])
+            for key, val in response['headers']:
+                self.add_header(key, val)
+            self.write(response['data'])
+            self.finish()
+
+    get = post = put = patch = delete = options = request_handler
+
+
+class ConfigAttrGetterSetter(object):
+    def __init__(self, config):
+        self.config = config
+
+    def __setitem__(self, key, value):
+        self.config[key] = value
+
+    def __getitem__(self, key):
+        return self.config[key]
+
 
 class TestServer(object):
-    request = {}
-    response = {}
-    response_once = {'headers': []}
-    sleep = {}
-    methods = ('get', 'post', 'head', 'options', 'put', 'delete',
-               'patch', 'trace', 'connect')
-
     def __init__(self, port=9876, address='127.0.0.1', extra_ports=None):
         self.port = port
         self.address = address
@@ -33,28 +166,9 @@ class TestServer(object):
         self._handler = None
         self._thread = None
 
-    def get_param(self, key, method='get', clear_once=True):
-        method_key = '%s.%s' % (method, key)
-        if method_key in self.response_once:
-            value = self.response_once[method_key]
-            if clear_once:
-                del self.response_once[method_key]
-            return value
-        elif key in self.response_once:
-            value = self.response_once[key]
-            if clear_once:
-                del self.response_once[key]
-            return value
-        elif method_key in self.response:
-            return self.response[method_key]
-        elif key in self.response:
-            return self.response[key]
-        else:
-            raise TestServerRuntimeError('Parameter %s does not exists in '
-                                         'server response data' % key)
-
     def reset(self):
-        self.request.update({
+        CONFIG['request'].clear()
+        CONFIG['request'].update({
             'args': {},
             'headers': {},
             'cookies': None,
@@ -65,135 +179,26 @@ class TestServer(object):
             'files': {},
             'client_ip': None,
         })
-        self.response = {
+        CONFIG['response'].clear()
+        CONFIG['response'].update({
             'code': 200,
             'data': '',
             'headers': [],
             'cookies': [],
             'callback': None,
             'sleep': None,
-        }
+        })
+        CONFIG['response_once'].clear()
 
-        self.response_once = {}
-
-    def get_handler(self):
-        "Build tornado request handler that is used in HTTP server"
-        SERVER = self
-
-        class MainHandler(tornado.web.RequestHandler):
-            def decode_argument(self, value, **kwargs):
-                # pylint: disable=unused-argument
-                return value.decode(SERVER.request['charset'])
-
-            @tornado.web.asynchronous
-            @tornado.gen.engine
-            def method_handler(self):
-                # Remove some standard tornado headers
-                for key in ('Content-Type', 'Server'):
-                    if key in self._headers:
-                        del self._headers[key]
-
-                method = self.request.method.lower()
-
-                sleep = SERVER.get_param('sleep', method)
-                if sleep:
-                    yield tornado.gen.Task(IOLoop.instance().add_timeout,
-                                           time.time() + sleep)
-                SERVER.request['client_ip'] = self.request.remote_ip
-                SERVER.request['args'] = {}
-                for key in self.request.arguments.keys():
-                    SERVER.request['args'][key] = self.get_argument(key)
-                SERVER.request['headers'] = self.request.headers
-                SERVER.request['path'] = self.request.path
-                SERVER.request['method'] = self.request.method
-                SERVER.request['cookies'] = self.request.cookies
-                charset = SERVER.request['charset']
-                SERVER.request['data'] = self.request.body
-                SERVER.request['files'] = self.request.files
-
-                callback = SERVER.get_param('callback', method)
-                if callback:
-                    call = callback(self)
-                    if isinstance(call, types.GeneratorType):
-                        for item in call:
-                            if isinstance(item, dict):
-                                assert 'type' in item
-                                assert item['type'] in ('sleep',)
-                                if item['type'] == 'sleep':
-                                    yield tornado.gen.Task(
-                                        IOLoop.instance().add_timeout,
-                                        time.time() + item['time'],
-                                    )
-                            else:
-                                yield item
-                else:
-                    response = {
-                        'code': None,
-                        'headers': [],
-                        'data': None,
-                    }
-
-                    response['code'] = SERVER.get_param('code', method)
-
-                    for key, val in SERVER.get_param('cookies', method):
-                        # Set-Cookie: name=newvalue; expires=date;
-                        # path=/; domain=.example.org.
-                        response['headers'].append(
-                            ('Set-Cookie', '%s=%s' % (key, val)))
-
-                    for key, value in SERVER.get_param('headers', method):
-                        response['headers'].append((key, value))
-
-                    response['headers'].append(
-                        ('Listen-Port', str(self.application.listen_port)))
-
-                    data = SERVER.get_param('data', method)
-                    if isinstance(data, six.string_types):
-                        response['data'] = data
-                    elif isinstance(data, six.binary_type):
-                        response['data'] = data
-                    elif isinstance(data, collections.Iterable):
-                        try:
-                            response['data'] = next(data)
-                        except StopIteration:
-                            response['code'] = 405
-                            response['data'] = b''
-                    else:
-                        raise TestServerRuntimeError('Data parameter should '
-                                                     'be string or iterable '
-                                                     'object')
-
-                    header_keys = [x[0].lower() for x in response['headers']]
-                    if 'content-type' not in header_keys:
-                        response['headers'].append(
-                            ('Content-Type',
-                             'text/html; charset=%s' % charset))
-                    if 'server' not in header_keys:
-                        response['headers'].append(
-                            ('Server', 'TestServer/%s' % test_server.version))
-
-                    self.set_status(response['code'])
-                    for key, val in response['headers']:
-                        self.add_header(key, val)
-                    self.write(response['data'])
-                    self.finish()
-
-            get = method_handler
-            post = method_handler
-            put = method_handler
-            patch = method_handler
-            delete = method_handler
-            options = method_handler
-
-        if not self._handler:
-            self._handler = MainHandler
-        return self._handler
+    request = ConfigAttrGetterSetter(CONFIG['request'])
+    response = ConfigAttrGetterSetter(CONFIG['response'])
+    response_once = ConfigAttrGetterSetter(CONFIG['response_once'])
 
     def _build_web_app(self):
         """Build tornado web application that is served by
         HTTP server"""
         return tornado.web.Application([
-            (r"^.*", self.get_handler()),
+            (r"^.*", TestServerRequestHandler, {'test_server': self}),
         ])
 
     def main_loop_function(self):
@@ -229,9 +234,8 @@ class TestServer(object):
         try:
             tornado.ioloop.IOLoop.instance().start()
         finally:
-            # manually close sockets
-            # to be able to create other HTTP servers
-            # on same sockets
+            # manually close sockets to be able to create
+            # other HTTP servers on same sockets
             for server in servers:
                 # pylint: disable=protected-access
                 server.stop()
@@ -269,14 +273,3 @@ class TestServer(object):
         if port is None:
             port = self.port
         return urljoin('http://%s:%d/' % (self.address, port), extra)
-
-
-if __name__ == '__main__':
-    server = TestServer()
-    server.response['data'] = 'home page'
-    server.start()
-    try:
-        while not server.is_stopped:
-            time.sleep(0.1)
-    except KeyboardInterrupt:
-        server.stop()
