@@ -2,8 +2,9 @@ from unittest import TestCase
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.error import HTTPError
 import time
+from threading import Thread
 
-from test_server import TestServer
+from test_server import TestServer, WaitTimeoutError
 import test_server
 
 
@@ -165,6 +166,21 @@ class ServerTestCase(TestCase):
 
         info = urlopen(self.server.get_url())
         self.assertEqual(info.getcode(), 200)
+
+    def test_request_done(self):
+        self.assertEqual(False, self.server.request['done'])
+        urlopen(self.server.get_url()).read()
+        self.assertEqual(True, self.server.request['done'])
+
+    def test_wait_request(self):
+        def worker():
+            time.sleep(1)
+            urlopen(self.server.get_url()).read()
+        Thread(target=worker).start()
+        self.server.wait_request(2)
+
+    def test_wait_timeout_error(self):
+        self.assertRaises(WaitTimeoutError, self.server.wait_request, 0.5)
 
     def test_response_once_cookies(self):
         self.server.response['cookies'] = [('foo', 'bar')]

@@ -14,7 +14,10 @@ import types
 from test_server.error import TestServerRuntimeError
 import test_server
 
-__all__ = ('TestServer',)
+__all__ = ('TestServer', 'WaitTimeoutError')
+
+class WaitTimeoutError(Exception):
+    pass
 
 
 class TestServerRequestHandler(tornado.web.RequestHandler):
@@ -138,6 +141,8 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
             self.write(response['data'])
             self.finish()
 
+        self._server.request['done'] = True
+
     get = post = put = patch = delete = options = request_handler
 
 
@@ -154,6 +159,7 @@ class TestServer(object):
         self._handler = None
         self._thread = None
         self.ioloop = IOLoop()
+        self.ioloop.make_current()
 
     def reset(self):
         self.request.clear()
@@ -167,6 +173,7 @@ class TestServer(object):
             'data': None,
             'files': {},
             'client_ip': None,
+            'done': False,
         })
         self.response.clear()
         self.response.update({
@@ -259,3 +266,14 @@ class TestServer(object):
         if port is None:
             port = self.port
         return urljoin('http://%s:%d/' % (self.address, port), extra)
+
+    def wait_request(self, timeout):
+        """Stupid implementation that eats CPU"""
+        start = time.time()
+        while True:
+            if self.request['done']:
+                break
+            time.sleep(0.01)
+            if time.time() - start > timeout:
+                raise WaitTimeoutError('No request processed in %d seconds'
+                                       % timeout)
