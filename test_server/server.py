@@ -255,6 +255,8 @@ class TestServer(object):
             else:
                 break
 
+        self.reset()
+
     def stop(self):
         "Stop tornado loop and wait for thread finished it work"
         self.ioloop.stop()

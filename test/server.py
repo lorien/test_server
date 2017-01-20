@@ -167,6 +167,11 @@ class ServerTestCase(TestCase):
         info = urlopen(self.server.get_url())
         self.assertEqual(info.getcode(), 200)
 
+    def test_request_done_after_start(self):
+        server = TestServer(port=self.server.port + 1)
+        server.start()
+        self.assertEqual(False, self.server.request['done'])
+
     def test_request_done(self):
         self.assertEqual(False, self.server.request['done'])
         urlopen(self.server.get_url()).read()
