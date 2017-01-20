@@ -146,6 +146,10 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
 
     get = post = put = patch = delete = options = request_handler
 
+    def finish(self, *args, **kwargs):
+        self._server.request['done'] = True
+        super(TestServerRequestHandler, self).finish(*args, **kwargs)
+
 
 class TestServer(object):
     request = {}
