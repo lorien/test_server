@@ -15,6 +15,7 @@ from test_server.error import TestServerRuntimeError
 import test_server
 
 __all__ = ('TestServer', 'WaitTimeoutError')
+logger = logging.getLogger('test_server.server')
 
 class WaitTimeoutError(Exception):
     pass
@@ -221,7 +222,7 @@ class TestServer(object):
                 else:
                     break
 
-            print('Listening on port %d' % port)
+            logger.debug('Listening on port %d' % port)
             servers.append(server)
 
         try:
