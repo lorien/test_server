@@ -12,6 +12,7 @@ class ServerTestCase(TestCase):
     def setUpClass(cls):
         cls.server = TestServer()
         cls.server.start()
+        print('!!!')
 
     @classmethod
     def tearDownClass(cls):

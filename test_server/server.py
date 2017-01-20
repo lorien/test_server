@@ -57,7 +57,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
 
         sleep = self.get_param('sleep', method)
         if sleep:
-            yield tornado.gen.Task(IOLoop.instance().add_timeout,
+            yield tornado.gen.Task(self._server.ioloop.add_timeout,
                                    time.time() + sleep)
         self._server.request['client_ip'] = self.request.remote_ip
         self._server.request['args'] = {}
@@ -81,7 +81,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                         assert item['type'] in ('sleep',)
                         if item['type'] == 'sleep':
                             yield tornado.gen.Task(
-                                IOLoop.instance().add_timeout,
+                                self._server.ioloop.add_timeout,
                                 time.time() + item['time'],
                             )
                     else:
@@ -153,6 +153,7 @@ class TestServer(object):
         self.reset()
         self._handler = None
         self._thread = None
+        self.ioloop = IOLoop()
 
     def reset(self):
         self.request.clear()
@@ -189,6 +190,7 @@ class TestServer(object):
         """This is function that is executed in separate thread:
          * start HTTP server
          * start tornado loop"""
+        self.ioloop.make_current()
         ports = [self.port] + self.extra_ports
         servers = []
         for port in ports:
@@ -216,7 +218,7 @@ class TestServer(object):
             servers.append(server)
 
         try:
-            tornado.ioloop.IOLoop.instance().start()
+            self.ioloop.start()
         finally:
             # manually close sockets to be able to create
             # other HTTP servers on same sockets
@@ -248,7 +250,7 @@ class TestServer(object):
 
     def stop(self):
         "Stop tornado loop and wait for thread finished it work"
-        tornado.ioloop.IOLoop.instance().stop()
+        self.ioloop.stop()
         self._thread.join()
         self.is_stopped = True
 
