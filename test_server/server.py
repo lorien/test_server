@@ -147,6 +147,11 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
     get = post = put = patch = delete = options = request_handler
 
     def finish(self, *args, **kwargs):
+        # I am not sure about this.
+        # I hope that solves strange error in tests
+        # when request['done'] is not True after successful
+        # request to the test server
+        # I thinks it is about race-codition
         self._server.request['done'] = True
         super(TestServerRequestHandler, self).finish(*args, **kwargs)
 
