@@ -194,7 +194,7 @@ class ServerTestCase(TestCase):
     def test_default_header_server(self):
         info = urlopen(self.server.get_url())
         self.assertEquals(info.headers['server'],
-                          'TestServer/%s' % test_server.version)
+                          'TestServer/%s' % test_server.__version__)
 
     def test_custom_header_server(self):
         self.server.response['headers'] = [

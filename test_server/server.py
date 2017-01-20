@@ -16,39 +16,34 @@ import test_server
 
 __all__ = ('TestServer',)
 
-CONFIG = { 
-    'request': {},
-    'response': {},
-    'response_once': {},
-}
 
 class TestServerRequestHandler(tornado.web.RequestHandler):
     def initialize(self, test_server):
-        self._test_server = test_server
+        self._server = test_server
 
     def get_param(self, key, method='get', clear_once=True):
         method_key = '%s.%s' % (method, key)
-        if method_key in CONFIG['response_once']:
-            value = CONFIG['response_once'][method_key]
+        if method_key in self._server.response_once:
+            value = self._server.response_once[method_key]
             if clear_once:
-                del CONFIG['response_once'][method_key]
+                del self._server.response_once[method_key]
             return value
-        elif key in CONFIG['response_once']:
-            value = CONFIG['response_once'][key]
+        elif key in self._server.response_once:
+            value = self._server.response_once[key]
             if clear_once:
-                del CONFIG['response_once'][key]
+                del self._server.response_once[key]
             return value
-        elif method_key in CONFIG['response']:
-            return CONFIG['response'][method_key]
-        elif key in CONFIG['response']:
-            return CONFIG['response'][key]
+        elif method_key in self._server.response:
+            return self._server.response[method_key]
+        elif key in self._server.response:
+            return self._server.response[key]
         else:
             raise TestServerRuntimeError('Parameter %s does not exists in '
                                          'server response data' % key)
 
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
-        return value.decode(CONFIG['request']['charset'])
+        return value.decode(self._server.request['charset'])
 
     @tornado.web.asynchronous
     @tornado.gen.engine
@@ -64,17 +59,17 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         if sleep:
             yield tornado.gen.Task(IOLoop.instance().add_timeout,
                                    time.time() + sleep)
-        CONFIG['request']['client_ip'] = self.request.remote_ip
-        CONFIG['request']['args'] = {}
+        self._server.request['client_ip'] = self.request.remote_ip
+        self._server.request['args'] = {}
         for key in self.request.arguments.keys():
-            CONFIG['request']['args'][key] = self.get_argument(key)
-        CONFIG['request']['headers'] = self.request.headers
-        CONFIG['request']['path'] = self.request.path
-        CONFIG['request']['method'] = self.request.method
-        CONFIG['request']['cookies'] = self.request.cookies
-        charset = CONFIG['request']['charset']
-        CONFIG['request']['data'] = self.request.body
-        CONFIG['request']['files'] = self.request.files
+            self._server.request['args'][key] = self.get_argument(key)
+        self._server.request['headers'] = self.request.headers
+        self._server.request['path'] = self.request.path
+        self._server.request['method'] = self.request.method
+        self._server.request['cookies'] = self.request.cookies
+        charset = self._server.request['charset']
+        self._server.request['data'] = self.request.body
+        self._server.request['files'] = self.request.files
 
         callback = self.get_param('callback', method)
         if callback:
@@ -135,7 +130,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                      'text/html; charset=%s' % charset))
             if 'server' not in header_keys:
                 response['headers'].append(
-                    ('Server', 'TestServer/%s' % test_server.version))
+                    ('Server', 'TestServer/%s' % test_server.__version__))
 
             self.set_status(response['code'])
             for key, val in response['headers']:
@@ -146,18 +141,11 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
     get = post = put = patch = delete = options = request_handler
 
 
-class ConfigAttrGetterSetter(object):
-    def __init__(self, config):
-        self.config = config
-
-    def __setitem__(self, key, value):
-        self.config[key] = value
-
-    def __getitem__(self, key):
-        return self.config[key]
-
-
 class TestServer(object):
+    request = {}
+    response = {}
+    response_once = {}
+
     def __init__(self, port=9876, address='127.0.0.1', extra_ports=None):
         self.port = port
         self.address = address
@@ -167,8 +155,8 @@ class TestServer(object):
         self._thread = None
 
     def reset(self):
-        CONFIG['request'].clear()
-        CONFIG['request'].update({
+        self.request.clear()
+        self.request.update({
             'args': {},
             'headers': {},
             'cookies': None,
@@ -179,8 +167,8 @@ class TestServer(object):
             'files': {},
             'client_ip': None,
         })
-        CONFIG['response'].clear()
-        CONFIG['response'].update({
+        self.response.clear()
+        self.response.update({
             'code': 200,
             'data': '',
             'headers': [],
@@ -188,11 +176,7 @@ class TestServer(object):
             'callback': None,
             'sleep': None,
         })
-        CONFIG['response_once'].clear()
-
-    request = ConfigAttrGetterSetter(CONFIG['request'])
-    response = ConfigAttrGetterSetter(CONFIG['response'])
-    response_once = ConfigAttrGetterSetter(CONFIG['response_once'])
+        self.response_once.clear()
 
     def _build_web_app(self):
         """Build tornado web application that is served by
@@ -213,7 +197,7 @@ class TestServer(object):
             server = HTTPServer(app)
 
             try_limit = 10
-            try_pause = 0.1
+            try_pause = 1 / float(try_limit)
             for x in range(try_limit):
                 try:
                     server.listen(port, self.address)
@@ -250,7 +234,7 @@ class TestServer(object):
         self._thread.start()
 
         try_limit = 10
-        try_pause = 0.05
+        try_pause = 0.5 / float(try_limit)
         for x in range(try_limit):
             try:
                 urlopen(self.get_url()).read()
