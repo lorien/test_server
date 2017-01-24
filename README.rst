@@ -8,8 +8,9 @@ Test-server
 .. image:: https://coveralls.io/repos/lorien/test_server/badge.svg?branch=master
     :target: https://coveralls.io/r/lorien/test_server?branch=master
 
-.. image:: https://pypip.in/download/test-server/badge.svg?period=month
-    :target: https://pypi.python.org/pypi/test-server
+.. image:: https://api.codacy.com/project/badge/Grade/3ff9f3ebf06d4b7f8809b264837eac43
+   :target: https://www.codacy.com/app/lorien/test_server?utm_source=github.com&utm_medium=referral&utm_content=lorien/test_server&utm_campaign=badger
+
 
 .. image:: https://pypip.in/version/test-server/badge.svg
     :target: https://pypi.python.org/pypi/test-server
