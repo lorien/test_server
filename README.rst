@@ -17,6 +17,14 @@ Test-server
 HTTP Server to test HTTP clients.
 
 
+Installation
+============
+
+.. code:: bash
+
+    pip install test-server
+
+
 Usage Example
 =============
 
@@ -49,17 +57,3 @@ Example:
             self.server.response['data'] = token
             data = urlopen(self.server.base_url).read()
             self.assertEqual(data, token)
-
-
-Installation
-============
-
-Run::
-
-    pip install test-server
-
-
-Dependencies
-============
-
-* tornado
