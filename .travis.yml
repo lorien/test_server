@@ -20,5 +20,5 @@ install:
 script:
   - tox -e $TOX_ENV
 
-#after_success:
-#  - if [[ "$CODACY_PROJECT_TOKEN" != "" ]]; then python-codacy-coverage -r coverage.xml; fi
+after_success:
+  - coveralls
