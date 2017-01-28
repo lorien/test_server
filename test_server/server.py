@@ -203,7 +203,7 @@ class TestServer(object):
             (r"^.*", TestServerRequestHandler, {'test_server': self}),
         ])
 
-    def main_loop_function(self):
+    def main_loop_function(self, keep_alive=False):
         """This is function that is executed in separate thread:
          * start HTTP server
          * start tornado loop"""
@@ -213,7 +213,7 @@ class TestServer(object):
         for port in ports:
             app = self._build_web_app()
             app.listen_port = port
-            server = HTTPServer(app)
+            server = HTTPServer(app, no_keep_alive=not keep_alive)
 
             try_limit = 10
             try_pause = 1 / float(try_limit)
@@ -243,12 +243,12 @@ class TestServer(object):
                 # pylint: disable=protected-access
                 server.stop()
 
-    def start(self, daemon=True):
+    def start(self, keep_alive=False, daemon=True):
         """Create new thread with tornado loop and start there
         HTTP server."""
 
         self.is_stopped = False
-        self._thread = Thread(target=self.main_loop_function)
+        self._thread = Thread(target=self.main_loop_function, args=[keep_alive])
         self._thread.daemon = daemon
         self._thread.start()
 
