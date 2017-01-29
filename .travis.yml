@@ -2,23 +2,47 @@ language: python
 
 python: 2.7
 
-env:
-  - TOX_ENV=py27
-  - TOX_ENV=py33
-  - TOX_ENV=py34
+sudo: required
 
 matrix:
   include:
-    - env: TOX_ENV=py35
-      python: 3.5
-    - env: TOX_ENV=py36
-      python: 3.6
+    - os: osx
+      language: generic
+      env: TOX_ENV=py27
+    - os: osx
+      language: generic
+      env: TOX_ENV=py36
+  exclude:
+    - python: 2.7 # hack to exclude default no-env travis job
+
+before_install:
+  - cat /etc/hosts
+  - cat /etc/resolv.conf
+  - hostname
 
 install:
-  - pip install tox
+  # Deal with issue on Travis builders re: multiprocessing.Queue :(
+  - "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      brew update
+      brew unlink python
+      brew unlink python3
+      if [[ TOX_ENV == py2* ]]; then
+        brew install python
+      else
+        brew install python3
+      fi
+    fi
+  - |
+    if [[ TOX_ENV == py2* ]]; then
+      pip install -U pip setuptools tox
+    else
+      pip3 install -U pip setuptools tox
+    fi
 
 script:
-  - tox -e $TOX_ENV
+    - tox -e $TOX_ENV
 
-after_success:
-  - coveralls
+#after_success:
+#  - coveralls
