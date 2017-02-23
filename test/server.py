@@ -1,296 +1,294 @@
 from unittest import TestCase
-from six.moves.urllib.request import urlopen, Request
-from six.moves.urllib.error import HTTPError
 import time
 from threading import Thread
+
+from six.moves.urllib.request import urlopen, Request
+from six.moves.urllib.error import HTTPError
+import pytest
 
 from test_server import TestServer, WaitTimeoutError
 import test_server
 
 
-class ServerTestCase(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.server = TestServer()
-        cls.server.start()
+@pytest.fixture(scope='module')
+def global_server():
+    server = TestServer()
+    server.start()
+    yield server
+    server.stop()
 
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
 
-    def setUp(self):
-        self.server.reset()
+@pytest.fixture(scope='function')
+def server(global_server):
+    global_server.reset()
+    return global_server
 
-    def test_get(self):
-        self.server.response['data'] = b'zorro'
-        data = urlopen(self.server.get_url()).read()
-        self.assertEqual(data, self.server.response['data'])
 
-    def test_request_client_ip(self):
-        urlopen(self.server.get_url()).read()
-        self.assertEqual(self.server.address, self.server.request['client_ip'])
+def test_get(server):
+    server.response['data'] = b'zorro'
+    data = urlopen(server.get_url()).read()
+    assert data == server.response['data']
 
-    def test_path(self):
-        urlopen(self.server.get_url('/foo')).read()
-        self.assertEqual(self.server.request['path'], '/foo')
 
-        urlopen(self.server.get_url('/foo?bar=1')).read()
-        self.assertEqual(self.server.request['path'], '/foo')
-        self.assertEqual(self.server.request['args']['bar'], '1')
+def test_request_client_ip(server):
+    urlopen(server.get_url()).read()
+    assert server.address == server.request['client_ip']
 
-    def test_post(self):
-        self.server.response['post.data'] = b'foo'
-        data = urlopen(self.server.get_url(), b'THE POST').read()
-        self.assertEqual(data, self.server.response['post.data'])
 
-    def test_data_iterator(self):
-        class ContentGenerator(object):
-            def __init__(self):
-                self.count = 0
+def test_path(server):
+    urlopen(server.get_url('/foo')).read()
+    assert server.request['path'] == '/foo'
 
-            def __iter__(self):
-                return self
+    urlopen(server.get_url('/foo?bar=1')).read()
+    assert server.request['path'] == '/foo'
+    assert server.request['args']['bar'] == '1'
 
-            def next(self):
-                self.count += 1
-                return 'foo'
 
-            __next__ = next
+def test_post(server):
+    server.response['post.data'] = b'foo'
+    data = urlopen(server.get_url(), b'THE POST').read()
+    assert data == server.response['post.data']
 
-        gen = ContentGenerator()
-        self.server.response['get.data'] = gen
-        urlopen(self.server.get_url()).read()
-        self.assertEqual(gen.count, 1)
-        urlopen(self.server.get_url()).read()
-        self.assertEqual(gen.count, 2)
-        # Now create POST request which should no be
-        # processed with ContentGenerator which is bind to GET
-        # requests
-        urlopen(self.server.get_url(), b'some post').read()
-        self.assertEqual(gen.count, 2)
 
-    def test_data_generator(self):
-        def gen():
-            yield b'one'
-            yield b'two'
+def test_data_iterator(server):
+    class ContentGenerator(object):
+        def __init__(self):
+            self.count = 0
 
-        self.server.response['get.data'] = gen()
-        self.assertEquals(b'one', urlopen(self.server.get_url()).read())
-        self.assertEquals(b'two', urlopen(self.server.get_url()).read())
-        self.assertRaises(HTTPError, urlopen, self.server.get_url())
+        def __iter__(self):
+            return self
 
-    def test_response_once_get(self):
-        self.server.response['data'] = b'base'
-        self.assertEquals(b'base', urlopen(self.server.get_url()).read())
+        def next(self):
+            self.count += 1
+            return 'foo'
 
-        self.server.response_once['data'] = b'tmp'
-        self.assertEquals(b'tmp', urlopen(self.server.get_url()).read())
+        __next__ = next
 
-        self.assertEquals(b'base', urlopen(self.server.get_url()).read())
+    gen = ContentGenerator()
+    server.response['get.data'] = gen
+    urlopen(server.get_url()).read()
+    assert gen.count == 1
+    urlopen(server.get_url()).read()
+    assert gen.count == 2
+    # Now create POST request which should no be
+    # processed with ContentGenerator which is bind to GET
+    # requests
+    urlopen(server.get_url(), b'some post').read()
+    assert gen.count == 2
 
-    def test_response_once_headers(self):
-        self.server.response['headers'] = [('foo', 'bar')]
-        info = urlopen(self.server.get_url())
-        self.assertTrue(info.headers['foo'] == 'bar')
 
-        self.server.response_once['headers'] = [('baz', 'gaz')]
-        info = urlopen(self.server.get_url())
-        self.assertTrue(info.headers['baz'] == 'gaz')
-        self.assertFalse('foo' in info.headers)
+def test_data_generator(server):
+    def gen():
+        yield b'one'
+        yield b'two'
 
-        info = urlopen(self.server.get_url())
-        self.assertFalse('baz' in info.headers)
-        self.assertTrue(info.headers['foo'] == 'bar')
+    server.response['get.data'] = gen()
+    assert b'one' == urlopen(server.get_url()).read()
+    assert b'two' == urlopen(server.get_url()).read()
+    with pytest.raises(HTTPError):
+       urlopen(server.get_url())
 
-    def test_response_once_reset_headers(self):
-        self.server.response_once['headers'] = [('foo', 'bar')]
-        self.server.reset()
-        info = urlopen(self.server.get_url())
-        self.assertFalse('foo' in info.headers)
 
-    def test_method_sleep(self):
-        delay = 0.3
+def test_response_once_get(server):
+    server.response['data'] = b'base'
+    assert b'base' == urlopen(server.get_url()).read()
 
-        start = time.time()
-        urlopen(self.server.get_url())
-        elapsed = time.time() - start
-        self.assertFalse(elapsed > delay)
+    server.response_once['data'] = b'tmp'
+    assert b'tmp' == urlopen(server.get_url()).read()
 
-        self.server.response['sleep'] = delay
-        start = time.time()
-        urlopen(self.server.get_url())
-        elapsed = time.time() - start
-        self.assertTrue(elapsed > delay)
+    assert b'base' == urlopen(server.get_url()).read()
 
-    def test_callback(self):
-        def get_callback(self):
-            self.set_header('method', 'get')
-            self.write(b'Hello')
-            self.finish()
 
-        def post_callback(self):
-            self.set_header('method', 'post')
-            self.write(b'Hello')
-            self.finish()
+def test_response_once_headers(server):
+    server.response['headers'] = [('foo', 'bar')]
+    info = urlopen(server.get_url())
+    assert info.headers['foo'] == 'bar'
 
-        self.server.response['callback'] = get_callback
-        info = urlopen(self.server.get_url())
-        self.assertTrue(info.headers['method'] == 'get')
-        self.assertEqual(info.read(), b'Hello')
+    server.response_once['headers'] = [('baz', 'gaz')]
+    info = urlopen(server.get_url())
+    assert info.headers['baz'] == 'gaz'
+    assert 'foo' not in info.headers
 
-        self.server.response['post.callback'] = post_callback
-        info = urlopen(self.server.get_url(), b'key=val')
-        self.assertTrue(info.headers['method'] == 'post')
-        self.assertEqual(info.read(), b'Hello')
+    info = urlopen(server.get_url())
+    assert 'baz' not in info.headers
+    assert info.headers['foo'] == 'bar'
 
-    def test_callback_yield_(self):
-        def callback(self):
-            self.set_header('method', 'get')
-            self.write(b'Hello')
-            yield {'type': 'sleep', 'time': 0.0001}
-            self.write(b'World')
 
-            self.finish()
+def test_response_once_reset_headers(server):
+    server.response_once['headers'] = [('foo', 'bar')]
+    server.reset()
+    info = urlopen(server.get_url())
+    assert 'foo' not in info.headers
 
-        self.server.response['callback'] = callback
-        info = urlopen(self.server.get_url())
-        self.assertEqual(info.read(), b'HelloWorld')
 
-    def test_response_once_code(self):
-        info = urlopen(self.server.get_url())
-        self.assertEqual(info.getcode(), 200)
+def test_method_sleep(server):
+    delay = 0.3
 
-        self.server.response_once['code'] = 403
-        self.assertRaises(HTTPError, urlopen, self.server.get_url())
+    start = time.time()
+    urlopen(server.get_url())
+    elapsed = time.time() - start
+    assert elapsed <= delay
 
-        info = urlopen(self.server.get_url())
-        self.assertEqual(info.getcode(), 200)
+    server.response['sleep'] = delay
+    start = time.time()
+    urlopen(server.get_url())
+    elapsed = time.time() - start
+    assert elapsed > delay
 
-    def test_request_done_after_start(self):
-        server = TestServer(port=self.server.port + 1)
+
+def test_callback(server):
+    def get_callback(self):
+        self.set_header('method', 'get')
+        self.write(b'Hello')
+        self.finish()
+
+    def post_callback(self):
+        self.set_header('method', 'post')
+        self.write(b'Hello')
+        self.finish()
+
+    server.response['callback'] = get_callback
+    info = urlopen(server.get_url())
+    assert info.headers['method'] == 'get'
+    assert info.read() == b'Hello'
+
+    server.response['post.callback'] = post_callback
+    info = urlopen(server.get_url(), b'key=val')
+    assert info.headers['method'] == 'post'
+    assert info.read() == b'Hello'
+
+
+def test_callback_yield_(server):
+    def callback(self):
+        self.set_header('method', 'get')
+        self.write(b'Hello')
+        yield {'type': 'sleep', 'time': 0.0001}
+        self.write(b'World')
+
+        self.finish()
+
+    server.response['callback'] = callback
+    info = urlopen(server.get_url())
+    assert info.read() == b'HelloWorld'
+
+
+def test_response_once_code(server):
+    info = urlopen(server.get_url())
+    assert info.getcode() == 200
+
+    server.response_once['code'] = 403
+    with pytest.raises(HTTPError):
+        urlopen(server.get_url())
+
+    info = urlopen(server.get_url())
+    assert info.getcode() == 200
+
+
+def test_request_done_after_start(server):
+    server = TestServer(port=server.port + 1)
+    server.start()
+    assert server.request['done'] is False
+
+
+def test_request_done(server):
+    assert server.request['done'] is False
+    urlopen(server.get_url()).read()
+    assert server.request['done'] is True
+
+
+def test_wait_request(server):
+    def worker():
+        time.sleep(1)
+        urlopen(server.get_url()).read()
+    Thread(target=worker).start()
+    server.wait_request(2)
+
+
+def test_wait_timeout_error(server):
+    with pytest.raises(WaitTimeoutError):
+        server.wait_request(0.5)
+
+
+def test_response_once_cookies(server):
+    server.response['cookies'] = [('foo', 'bar')]
+    info = urlopen(server.get_url())
+    assert 'foo=bar' in info.headers['Set-Cookie']
+
+    server.response_once['cookies'] = [('baz', 'gaz')]
+    info = urlopen(server.get_url())
+    assert 'foo=bar' not in info.headers['Set-Cookie']
+    assert 'baz=gaz' in info.headers['Set-Cookie']
+
+    info = urlopen(server.get_url())
+    assert 'foo=bar' in info.headers['Set-Cookie']
+    assert 'baz=gaz' not in info.headers['Set-Cookie']
+
+
+def test_default_header_content_type(server):
+    info = urlopen(server.get_url())
+    assert info.headers['content-type'] == 'text/html; charset=UTF-8'
+
+
+def test_custom_header_content_type(server):
+    server.response['headers'] = [
+        ('Content-Type', 'text/html; charset=koi8-r')]
+    info = urlopen(server.get_url())
+    assert info.headers['content-type'] == 'text/html; charset=koi8-r'
+
+
+def test_default_header_server(server):
+    info = urlopen(server.get_url())
+    assert (info.headers['server'] ==
+            ('TestServer/%s' % test_server.__version__))
+
+
+def test_custom_header_server(server):
+    server.response['headers'] = [
+        ('Server', 'Google')]
+    info = urlopen(server.get_url())
+    assert info.headers['server'] == 'Google'
+
+
+def test_options_method(server):
+    server.response['data'] = b'abc'
+
+    class RequestWithMethod(Request):
+        def __init__(self, method, *args, **kwargs):
+            self._method = method
+            Request.__init__(self, *args, **kwargs)
+
+        def get_method(self):
+            return self._method
+
+    req = RequestWithMethod(url=server.get_url(),
+                            method='OPTIONS')
+    info = urlopen(req)
+    assert 'OPTIONS' == server.request['method']
+    assert b'abc' == server.response['data']
+
+
+def test_multiple_start_stop_cycles():
+    for x in range(30):
+        server = TestServer()
         server.start()
-        self.assertEqual(False, self.server.request['done'])
-
-    def test_request_done(self):
-        self.assertEqual(False, self.server.request['done'])
-        urlopen(self.server.get_url()).read()
-        self.assertEqual(True, self.server.request['done'])
-
-    def test_wait_request(self):
-        def worker():
-            time.sleep(1)
-            urlopen(self.server.get_url()).read()
-        Thread(target=worker).start()
-        self.server.wait_request(2)
-
-    def test_wait_timeout_error(self):
-        self.assertRaises(WaitTimeoutError, self.server.wait_request, 0.5)
-
-    def test_response_once_cookies(self):
-        self.server.response['cookies'] = [('foo', 'bar')]
-        info = urlopen(self.server.get_url())
-        self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
-
-        self.server.response_once['cookies'] = [('baz', 'gaz')]
-        info = urlopen(self.server.get_url())
-        self.assertFalse('foo=bar' in info.headers['Set-Cookie'])
-        self.assertTrue('baz=gaz' in info.headers['Set-Cookie'])
-
-        info = urlopen(self.server.get_url())
-        self.assertTrue('foo=bar' in info.headers['Set-Cookie'])
-        self.assertFalse('baz=gaz' in info.headers['Set-Cookie'])
-
-    def test_default_header_content_type(self):
-        info = urlopen(self.server.get_url())
-        self.assertEquals(info.headers['content-type'],
-                          'text/html; charset=UTF-8')
-
-    def test_custom_header_content_type(self):
-        self.server.response['headers'] = [
-            ('Content-Type', 'text/html; charset=koi8-r')]
-        info = urlopen(self.server.get_url())
-        self.assertEquals(info.headers['content-type'],
-                          'text/html; charset=koi8-r')
-
-    def test_default_header_server(self):
-        info = urlopen(self.server.get_url())
-        self.assertEquals(info.headers['server'],
-                          'TestServer/%s' % test_server.__version__)
-
-    def test_custom_header_server(self):
-        self.server.response['headers'] = [
-            ('Server', 'Google')]
-        info = urlopen(self.server.get_url())
-        self.assertEquals(info.headers['server'], 'Google')
-
-    def test_options_method(self):
-        self.server.response['data'] = b'abc'
-
-        class RequestWithMethod(Request):
-            def __init__(self, method, *args, **kwargs):
-                self._method = method
-                Request.__init__(self, *args, **kwargs)
-  
-            def get_method(self):
-                return self._method
-
-        req = RequestWithMethod(url=self.server.get_url(),
-                                method='OPTIONS')
-        info = urlopen(req)
-        self.assertEqual('OPTIONS', self.server.request['method'])
-        self.assertEqual(b'abc', self.server.response['data'])
-
-
-
-class ServerMultStartStopTestCase(TestCase):
-    @classmethod
-    def setUpClass(cls):
-        cls.server = TestServer()
-        cls.server.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
-
-    def setUp(self):
-        self.server.reset()
-
-    def test_basic(self):
-        self.server.response['data'] = b'zorro'
-        data = urlopen(self.server.get_url()).read()
-        self.assertEqual(data, self.server.response['data'])
-
-
-class ServerMultiStartStopTestCase(TestCase):
-    def test_multiple_start_stop_cycles(self):
-        for x in range(30):
-            server = TestServer()
-            server.start()
+        try:
             server.response['data'] = b'zorro'
             for y in range(10):
                 data = urlopen(server.get_url()).read()
-                self.assertEqual(data, server.response['data'])
+                assert data == server.response['data']
+        finally:
             server.stop()
 
 
-class ExtraPortsTestCase(TestCase):
-    port = 9876
-    extra_ports = [9875, 9874]
-
-    @classmethod
-    def setUpClass(cls):
-        cls.server = TestServer(port=cls.port, extra_ports=cls.extra_ports)
-        cls.server.start()
-
-    @classmethod
-    def tearDownClass(cls):
-        cls.server.stop()
-
-    def setUp(self):
-        self.server.reset()
-
-    def test_basic(self):
-        self.server.response['data'] = b'zorro'
-        for port in [self.port] + self.extra_ports:
-            data = urlopen(self.server.get_url(port=port)).read()
-            self.assertEqual(data, self.server.response['data'])
+def test_extra_ports():
+    port = 9878
+    extra_ports = [9879, 9880]
+    server = TestServer(port=port, extra_ports=extra_ports)
+    server.start()
+    try:
+        server.response['data'] = b'zorro'
+        for port in [port] + extra_ports:
+            data = urlopen(server.get_url(port=port)).read()
+            assert data == server.response['data']
+    finally:
+        server.stop()
