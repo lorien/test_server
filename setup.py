@@ -10,10 +10,15 @@ setup(
     long_description = open(os.path.join(ROOT, 'README.rst')).read(),
     author = 'Gregory Petukhov',
     author_email = 'lorien@lorien.name',
-    install_requires = ['tornado', 'six'],
+    install_requires = ['tornado', 'six', 'psutil'],
     packages = ['test_server'],
     license = "MIT",
-    classifiers = [
+    entry_points={
+        'console_scripts': [
+            'test_server = test_server.server:script_test_server',
+        ],
+    },
+    classifiers=[
         'Programming Language :: Python',
         'Programming Language :: Python :: 2.7',
         'Programming Language :: Python :: 3.3',

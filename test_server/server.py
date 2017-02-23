@@ -1,15 +1,25 @@
 from threading import Thread
-from tornado.ioloop import IOLoop
 import tornado.web
 import time
 import collections
+import logging
+import types
+import os
+import tempfile
+import json
+from subprocess import Popen
+import signal
+import atexit
+import psutil
+
+from filelock import FileLock
+from tornado.locks import Semaphore
 import tornado.gen
 from tornado.httpserver import HTTPServer
+from tornado.ioloop import IOLoop
 from six.moves.urllib.parse import urljoin
 import six
 from six.moves.urllib.request import urlopen
-import logging
-import types
 
 from test_server.error import TestServerRuntimeError
 import test_server
@@ -21,21 +31,42 @@ class WaitTimeoutError(Exception):
     pass
 
 
+def kill_process(pid):
+    try:
+        proc = psutil.Process(pid)
+    except psutil.NoSuchProcess:
+        pass
+    else:
+        os.kill(pid, signal.SIGINT)
+        try:
+            proc.wait(timeout=1)
+        except psutil.TimeoutExpired:
+            os.kill(pid, signal.SIGTERM)
+            try:
+                proc.wait(timeout=2)
+            except psutil.TimeoutExpired:
+                raise WaitTimeoutError('Could not kill subprocess running'
+                                       ' test_server')
+
+
 class TestServerRequestHandler(tornado.web.RequestHandler):
     def initialize(self, test_server):
         self._server = test_server
 
     def get_param(self, key, method='get', clear_once=True):
         method_key = '%s.%s' % (method, key)
+
         if method_key in self._server.response_once:
             value = self._server.response_once[method_key]
             if clear_once:
                 del self._server.response_once[method_key]
+                self._server.save_state(['response_once'])
             return value
         elif key in self._server.response_once:
             value = self._server.response_once[key]
             if clear_once:
                 del self._server.response_once[key]
+                self._server.save_state(['response_once'])
             return value
         elif method_key in self._server.response:
             return self._server.response[method_key]
@@ -52,97 +83,108 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     @tornado.gen.engine
     def request_handler(self):
-        # Remove some standard tornado headers
-        for key in ('Content-Type', 'Server'):
-            if key in self._headers:
-                del self._headers[key]
+        with (yield self._server._locks['request_handler'].acquire()):
+            self._server.load_response_state()
+            # Remove some standard tornado headers
+            for key in ('Content-Type', 'Server'):
+                if key in self._headers:
+                    del self._headers[key]
 
-        method = self.request.method.lower()
+            method = self.request.method.lower()
 
-        sleep = self.get_param('sleep', method)
-        if sleep:
-            yield tornado.gen.Task(self._server.ioloop.add_timeout,
-                                   time.time() + sleep)
-        self._server.request['client_ip'] = self.request.remote_ip
-        self._server.request['args'] = {}
-        for key in self.request.arguments.keys():
-            self._server.request['args'][key] = self.get_argument(key)
-        self._server.request['headers'] = self.request.headers
-        self._server.request['path'] = self.request.path
-        self._server.request['method'] = self.request.method
-        self._server.request['cookies'] = self.request.cookies
-        charset = self._server.request['charset']
-        self._server.request['data'] = self.request.body
-        self._server.request['files'] = self.request.files
-
-        callback = self.get_param('callback', method)
-        if callback:
-            call = callback(self)
-            if isinstance(call, types.GeneratorType):
-                for item in call:
-                    if isinstance(item, dict):
-                        assert 'type' in item
-                        assert item['type'] in ('sleep',)
-                        if item['type'] == 'sleep':
-                            yield tornado.gen.Task(
-                                self._server.ioloop.add_timeout,
-                                time.time() + item['time'],
-                            )
-                    else:
-                        yield item
-        else:
-            response = {
-                'code': None,
-                'headers': [],
-                'data': None,
-            }
-
-            response['code'] = self.get_param('code', method)
-
-            for key, val in self.get_param('cookies', method):
-                # Set-Cookie: name=newvalue; expires=date;
-                # path=/; domain=.example.org.
-                response['headers'].append(
-                    ('Set-Cookie', '%s=%s' % (key, val)))
-
-            for key, value in self.get_param('headers', method):
-                response['headers'].append((key, value))
-
-            response['headers'].append(
-                ('Listen-Port', str(self.application.listen_port)))
-
-            data = self.get_param('data', method)
-            if isinstance(data, six.string_types):
-                response['data'] = data
-            elif isinstance(data, six.binary_type):
-                response['data'] = data
-            elif isinstance(data, collections.Iterable):
-                try:
-                    response['data'] = next(data)
-                except StopIteration:
-                    response['code'] = 405
-                    response['data'] = b''
+            sleep = self.get_param('sleep', method)
+            if sleep:
+                yield tornado.gen.Task(self._server.ioloop.add_timeout,
+                                       time.time() + sleep)
+            self._server.request['client_ip'] = self.request.remote_ip
+            self._server.request['args'] = {}
+            for key in self.request.arguments.keys():
+                self._server.request['args'][key] = self.get_argument(key)
+            if self._server._engine == 'subprocess':
+                self._server.request['headers'] = None
             else:
-                raise TestServerRuntimeError('Data parameter should '
-                                             'be string or iterable '
-                                             'object')
+                self._server.request['headers'] = self.request.headers
+            self._server.request['path'] = self.request.path
+            self._server.request['method'] = self.request.method
+            self._server.request['cookies'] = self.request.cookies
+            charset = self._server.request['charset']
+            self._server.request['data'] = self.request.body
+            self._server.request['files'] = self.request.files
 
-            header_keys = [x[0].lower() for x in response['headers']]
-            if 'content-type' not in header_keys:
+            callback = self.get_param('callback', method)
+            if callback:
+                call = callback(self)
+                if isinstance(call, types.GeneratorType):
+                    for item in call:
+                        if isinstance(item, dict):
+                            assert 'type' in item
+                            assert item['type'] in ('sleep',)
+                            if item['type'] == 'sleep':
+                                yield tornado.gen.Task(
+                                    self._server.ioloop.add_timeout,
+                                    time.time() + item['time'],
+                                )
+                        else:
+                            yield item
+            else:
+                response = {
+                    'code': None,
+                    'headers': [],
+                    'data': None,
+                }
+
+                response['code'] = self.get_param('code', method)
+
+                for key, val in self.get_param('cookies', method):
+                    # Set-Cookie: name=newvalue; expires=date;
+                    # path=/; domain=.example.org.
+                    response['headers'].append(
+                        ('Set-Cookie', '%s=%s' % (key, val)))
+
+                for key, value in self.get_param('headers', method):
+                    response['headers'].append((key, value))
+
                 response['headers'].append(
-                    ('Content-Type',
-                     'text/html; charset=%s' % charset))
-            if 'server' not in header_keys:
-                response['headers'].append(
-                    ('Server', 'TestServer/%s' % test_server.__version__))
+                    ('Listen-Port', str(self.application.listen_port)))
 
-            self.set_status(response['code'])
-            for key, val in response['headers']:
-                self.add_header(key, val)
-            self.write(response['data'])
-            self.finish()
+                data = self.get_param('data', method)
+                if isinstance(data, six.string_types):
+                    response['data'] = data
+                elif isinstance(data, six.binary_type):
+                    response['data'] = data
+                elif isinstance(data, collections.Iterable):
+                    try:
+                        response['data'] = next(data)
+                    except StopIteration:
+                        response['code'] = 405
+                        response['data'] = b''
+                else:
+                    raise TestServerRuntimeError('Data parameter should '
+                                                 'be string or iterable '
+                                                 'object')
 
-        self._server.request['done'] = True
+                header_keys = [x[0].lower() for x in response['headers']]
+                if 'content-type' not in header_keys:
+                    response['headers'].append(
+                        ('Content-Type',
+                         'text/html; charset=%s' % charset))
+                if 'server' not in header_keys:
+                    response['headers'].append(
+                        ('Server', 'TestServer/%s' % test_server.__version__))
+
+                self.set_status(response['code'])
+                for key, val in response['headers']:
+                    self.add_header(key, val)
+                self.write(response['data'])
+
+                self._server.request['done'] = True
+                self._server.save_request_state()
+
+            self._server.request['done'] = True
+            self._server.save_request_state()
+
+            if not callback:
+                self.finish()
 
     get = post = put = patch = delete = options = request_handler
 
@@ -161,15 +203,119 @@ class TestServer(object):
     response = {}
     response_once = {}
 
-    def __init__(self, port=9876, address='127.0.0.1', extra_ports=None):
+    def __init__(self, port=9876, address='127.0.0.1', extra_ports=None,
+                 engine='thread', role='master', **kwargs):
+        assert engine in ('thread', 'subprocess')
         self.port = port
         self.address = address
         self.extra_ports = list(extra_ports or [])
-        self.reset()
+        if engine == 'subprocess' and extra_ports:
+            raise TestServerRuntimeError(
+                'Option `extra_ports` is not supported'
+                ' for subprocess engine'
+            )
         self._handler = None
         self._thread = None
-        self.ioloop = IOLoop()
-        self.ioloop.make_current()
+        self._engine = engine
+        self._role = role
+        self.request_file = None
+        self.response_file = None
+        self.response_once_file = None
+        self.request_lock_file = None
+        self.response_lock_file = None
+        self.response_once_lock_file = None
+        if (role == 'master' and engine == 'thread') or role == 'server':
+            self.ioloop = IOLoop()
+            self.ioloop.make_current()
+        # Restrict any activity untill the reset method
+        # will setup initial content of request/respone files
+        if role == 'master' and engine == 'subprocess':
+                hdl, self.request_file = tempfile.mkstemp()
+                os.close(hdl)
+                hdl, self.response_file = tempfile.mkstemp()
+                os.close(hdl)
+                hdl, self.response_once_file = tempfile.mkstemp()
+                os.close(hdl)
+                print('Request file: %s' % self.request_file)
+                print('Response file: %s' % self.response_file)
+                print('Response_once file: %s'
+                      % self.response_once_file)
+        if role == 'server' and engine == 'subprocess':
+            self.request_file = kwargs['request_file']
+            self.response_file = kwargs['response_file']
+            self.response_once_file = kwargs['response_once_file']
+        if engine == 'subprocess':
+            self.request_lock_file = self.request_file + '.lock'
+            self.response_lock_file = self.response_file + '.lock'
+            self.response_once_lock_file = self.response_once_file + '.lock'
+        self._locks = {
+            'request_handler': Semaphore(),
+            'request_file': (FileLock(self.request_lock_file)
+                             if self.request_file else None),
+            'response_file': (FileLock(self.response_lock_file)
+                              if self.response_file else None),
+            'response_once_file': (FileLock(self.response_once_lock_file)
+                              if self.response_once_file else None),
+        }
+        self.reset()
+
+    def save_state(self, keys=None):
+        if self._engine == 'subprocess':
+            if keys is None:
+                keys = ('request', 'response', 'response_once')
+            for key in keys:
+                attr = '%s_file' % key
+                with self._locks[attr].acquire(timeout=-1):
+                    with open(getattr(self, attr), 'w') as out:
+                        json.dump(getattr(self, key), out)
+
+    def load_state(self, keys=None):
+        if self._engine == 'subprocess':
+            if keys is None:
+                keys = ('request', 'response', 'response_once')
+            for key in keys:
+                attr = '%s_file' % key
+                with self._locks[attr].acquire(timeout=-1):
+                    try:
+                        with open(getattr(self, attr)) as inp:
+                            content = inp.read()
+                        setattr(self, key, json.loads(content))
+                    except Exception as ex:
+                        raise Exception('%s, %s, file_content: [%s]' % (
+                            str(ex), attr, content))
+
+    def save_response_state(self):
+        self.save_state(['response', 'response_once'])
+
+    def load_response_state(self):
+        self.load_state(['response', 'response_once'])
+
+    def save_request_state(self):
+        self.save_state(['request'])
+
+    def load_request_state(self):
+        self.load_state(['request'])
+
+    def set_response(self, key, val):
+        """
+        Change response and save it state to file
+        """
+        self.response[key] = val
+        self.save_response_state()
+
+    def set_response_once(self, key, val):
+        """
+        Change response_once and save it state to file
+        """
+        self.response_once[key] = val
+        self.save_response_state()
+
+    def get_request(self, key):
+        """
+        Load request state and return value of specified key
+        """
+        self.load_request_state()
+        return self.request[key]
 
     def reset(self):
         self.request.clear()
@@ -195,6 +341,8 @@ class TestServer(object):
             'sleep': None,
         })
         self.response_once.clear()
+        self.save_request_state()
+        self.save_response_state()
 
     def _build_web_app(self):
         """Build tornado web application that is served by
@@ -248,29 +396,54 @@ class TestServer(object):
         HTTP server."""
 
         self.is_stopped = False
-        self._thread = Thread(target=self.main_loop_function, args=[keep_alive])
-        self._thread.daemon = daemon
-        self._thread.start()
 
-        try_limit = 10
-        try_pause = 0.5 / float(try_limit)
-        for x in range(try_limit):
-            try:
-                urlopen(self.get_url()).read()
-            except Exception as ex:
-                if x == (try_limit - 1):
-                    raise
+        if self._engine == 'thread' or self._role == 'server':
+            self._thread = Thread(target=self.main_loop_function, args=[keep_alive])
+            self._thread.daemon = daemon
+            self._thread.start()
+        elif self._engine == 'subprocess':
+            self._proc = Popen(['test_server',
+                                '%s:%d' % (self.address, self.port),
+                                '--req', self.request_file,
+                                '--resp', self.response_file,
+                                '--resp-once', self.response_once_file,
+                                ])
+
+            def kill_child():
+                try:
+                    os.kill(self._proc.pid, signal.SIGINT)
+                except OSError:
+                    pass
+
+            atexit.register(kill_child)
+                                                  
+
+        if self._role == 'master':
+            try_limit = 10
+            try_pause = 0.5 / float(try_limit)
+            for x in range(try_limit):
+                try:
+                    #with open(self.response_file) as inp:
+                    #    print('response-file: %s' % inp.read())
+                    urlopen(self.get_url()).read()
+                except Exception as ex:
+                    if x == (try_limit - 1):
+                        raise
+                    else:
+                        time.sleep(try_pause)
                 else:
-                    time.sleep(try_pause)
-            else:
-                break
+                    break
 
-        self.reset()
+            self.reset()
 
     def stop(self):
         "Stop tornado loop and wait for thread finished it work"
-        self.ioloop.stop()
-        self._thread.join()
+        if ((self._role == 'master' and self._engine == 'thread')
+            or self._role == 'server'):
+            self.ioloop.stop()
+            self._thread.join()
+        if (self._role == 'master' and self._engine == 'subprocess'):
+            kill_process(self._proc.pid)
         self.is_stopped = True
 
     def get_url(self, extra='', port=None):
@@ -283,9 +456,50 @@ class TestServer(object):
         """Stupid implementation that eats CPU"""
         start = time.time()
         while True:
-            if self.request['done']:
+            if self.get_request('done'):
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:
                 raise WaitTimeoutError('No request processed in %d seconds'
                                        % timeout)
+
+
+def script_test_server():
+    try:
+        from argparse import ArgumentParser
+        import sys
+
+        parser = ArgumentParser()
+        parser.add_argument('address')
+        parser.add_argument('--req')
+        parser.add_argument('--resp')
+        parser.add_argument('--resp-once')
+        opts = parser.parse_args()
+        if opts.req is None:
+            sys.stderr.write('Option --req is not specified\n')
+            sys.exit(1)
+        if opts.resp is None:
+            sys.stderr.write('Option --resp is not specified\n')
+            sys.exit(1)
+        if opts.resp_once is None:
+            sys.stderr.write('Option --resp-once is not specified\n')
+            sys.exit(1)
+        host, port = opts.address.split(':')
+        port = int(port)
+        server = TestServer(address=host,
+                            port=port,
+                            request_file=opts.req,
+                            response_file=opts.resp,
+                            response_once_file=opts.resp_once,
+                            engine='subprocess',
+                            role='server',
+                            )
+        server.start()
+        server.reset()
+        while True:
+            time.sleep(1)
+    except KeyboardInterrupt:
+        # Do not throw exception to console becuase
+        # it could came as standard shutdown signal
+        # from master process
+        sys.exit(1)

@@ -5,3 +5,4 @@ bumpversion
 six
 pytest
 pytest-cov
+filelock
