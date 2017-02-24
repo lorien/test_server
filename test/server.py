@@ -15,6 +15,7 @@ function:
 # pylint: disable=redefined-outer-name
 import time
 from threading import Thread
+import os
 
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.error import HTTPError
@@ -46,6 +47,7 @@ def skip_by_engine(request, opt_engine):
             pytest.skip('Skipped on engine %s' % opt_engine)
 
 
+@pytest.mark.foo
 @pytest.mark.skip_engine('subprocess')
 def test_get(server):
     valid_data = b'zorro'
@@ -159,6 +161,19 @@ def test_response_once_headers_with_state(server):
     info = urlopen(server.get_url())
     assert 'baz' not in info.headers
     assert info.headers['foo'] == 'bar'
+
+
+@pytest.mark.skip_engine('subprocess')
+def test_request_headers(server):
+    req = Request(server.get_url(), headers={'Foo': 'Bar'})
+    urlopen(req).read()
+    assert server.request['headers']['foo'] == 'Bar'
+
+
+def test_request_headers_with_state(server):
+    req = Request(server.get_url(), headers={'Foo': 'Bar'})
+    urlopen(req).read()
+    assert server.get_request('headers')['foo'] == 'Bar'
 
 
 @pytest.mark.skip_engine('subprocess')
@@ -419,18 +434,20 @@ def test_options_method_with_state(server):
 
 
 def test_multiple_start_stop_cycles(server):
-    server.stop()
-    for _ in range(30):
-        server = TestServer()
+    try:
+        server.stop()
+        for _ in range(30):
+            server2 = TestServer()
+            server2.start()
+            try:
+                server2.response['data'] = b'zorro'
+                for _ in range(10):
+                    data = urlopen(server2.get_url()).read()
+                    assert data == server2.response['data']
+            finally:
+                server2.stop()
+    finally:
         server.start()
-        try:
-            server.response['data'] = b'zorro'
-            for _ in range(10):
-                data = urlopen(server.get_url()).read()
-                assert data == server.response['data']
-        finally:
-            server.stop()
-    server.start()
 
 
 @pytest.mark.skip_engine('subprocess')
@@ -448,9 +465,30 @@ def test_extra_ports():
         server.stop()
 
 
+@pytest.mark.skip_engine('thread')
 def test_extra_ports_subprocess_engine():
     port = 9878
     extra_ports = [9879, 9880]
     with pytest.raises(TestServerRuntimeError):
         TestServer(port=port, extra_ports=extra_ports,
                    engine='subprocess', role='master')
+
+
+@pytest.mark.skip_engine('thread')
+def test_temp_files_are_removed(server):
+    try:
+        server.stop()
+        server2 = TestServer(engine='subprocess')
+        server2.start()
+        files = [
+            server2.request_file,
+            server2.response_file,
+            server2.response_once_file,
+            server2.request_lock_file,
+            server2.response_lock_file,
+            server2.response_once_lock_file,
+        ]
+        server2.stop()
+        assert all(not os.path.exists(x) for x in files)
+    finally:
+        server.start()

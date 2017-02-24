@@ -19,6 +19,7 @@ import tornado.web
 from tornado.locks import Semaphore
 import tornado.gen
 from tornado.httpserver import HTTPServer
+from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
 
 from test_server.error import TestServerRuntimeError
@@ -63,10 +64,11 @@ def bytes_to_unicode(obj):
         return obj
 
 
-def prepare_loaded_state(state):
+def prepare_loaded_state(state_key, state):
     """
-    Fix state loaded from JSON-serialized data
-    All values of data keys have to be converted to <bytes> strings
+    Fix state loaded from JSON-serialized data:
+    * all values of data keys have to be converted to <bytes> strings
+    * headers should be converted to tornado.httputil.HTTPHeaders
     """
     if 'data' in state:
         if state['data'] is not None:
@@ -75,6 +77,12 @@ def prepare_loaded_state(state):
         if key.endswith('.data'):
             if state[key] is not None:
                 state[key] = state[key].encode('utf-8')
+    if state_key == 'request':
+        hdr = HTTPHeaders()
+        if state['headers']:
+            for key, val in state['headers']:
+                hdr.add(key, val)
+        state['headers'] = hdr
     return state
 
 
@@ -133,7 +141,9 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
             for key in self.request.arguments.keys():
                 self._server.request['args'][key] = self.get_argument(key)
             if self._server._engine == 'subprocess':
-                self._server.request['headers'] = None
+                self._server.request['headers'] = (
+                    list(self.request.headers.get_all())
+                )
             else:
                 self._server.request['headers'] = self.request.headers
             self._server.request['path'] = self.request.path
@@ -313,7 +323,7 @@ class TestServer(object):
                     try:
                         with open(getattr(self, attr)) as inp:
                             content = inp.read()
-                        state = prepare_loaded_state(json.loads(content))
+                        state = prepare_loaded_state(key, json.loads(content))
                         setattr(self, key, state)
                     except Exception as ex:
                         logging.error('', exc_info=ex)
@@ -438,7 +448,7 @@ class TestServer(object):
                                   args=[keep_alive])
             self._thread.daemon = daemon
             self._thread.start()
-        elif self._engine == 'subprocess':
+        elif self._engine == 'subprocess' and self._role == 'master':
             self._proc = Popen([
                 'test_server',
                 '%s:%d' % (self.address, self.port),
@@ -454,6 +464,9 @@ class TestServer(object):
                     pass
 
             atexit.register(kill_child)
+            atexit.register(self.remove_temp_files)
+        else:
+            raise Exception('Should not be raised ever')
 
         if self._role == 'master':
             try_limit = 10
@@ -479,7 +492,23 @@ class TestServer(object):
             self._thread.join()
         if self._role == 'master' and self._engine == 'subprocess':
             kill_process(self._proc.pid)
+            self.remove_temp_files()
         #self.is_stopped = True
+
+    def remove_temp_files(self):
+        files = (
+            self.request_file,
+            self.response_file,
+            self.response_once_file,
+            self.request_lock_file,
+            self.response_lock_file,
+            self.response_once_lock_file,
+        )
+        for file_ in files:
+            try:
+                os.unlink(file_)
+            except OSError:
+                pass
 
     def get_url(self, extra='', port=None):
         "Build URL that is served by HTTP server"
