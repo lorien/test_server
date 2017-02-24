@@ -25,7 +25,7 @@ from test_server import (TestServer, WaitTimeoutError,
 import test_server
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='session')
 def global_server(opt_engine):
     server = TestServer(engine=opt_engine)
     server.start()
@@ -303,9 +303,8 @@ def test_wait_request(server):
 
 def test_wait_timeout_error(server):
     """Need many iterations to be sure"""
-    for _ in range(100):
-        with pytest.raises(WaitTimeoutError):
-            server.wait_request(0.01)
+    with pytest.raises(WaitTimeoutError):
+        server.wait_request(0.01)
 
 
 @pytest.mark.skip_engine('subprocess')

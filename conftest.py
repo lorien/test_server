@@ -5,6 +5,6 @@ def pytest_addoption(parser):
                      help='Method of running test HTTP server')
 
 
-@pytest.fixture(scope='module')
+@pytest.fixture(scope='session')
 def opt_engine(request):
     return request.config.getoption('--engine')
