@@ -49,6 +49,36 @@ def kill_process(pid):
                                        ' test_server')
 
 
+def bytes_to_unicode(obj):
+    if isinstance(obj, six.text_type):
+        return obj
+    elif isinstance(obj, six.binary_type):
+        return obj.decode('utf-8')
+    elif isinstance(obj, list):
+        return [bytes_to_unicode(x) for x in obj]
+    elif isinstance(obj, tuple):
+        return tuple((bytes_to_unicode(x) for x in obj))
+    elif isinstance(obj, dict):
+        return dict(map(bytes_to_unicode, x) for x in obj.items())
+    else:
+        return obj
+
+
+def prepare_loaded_state(state):
+    """
+    Fix state loaded from JSON-serialized data
+    All values of data keys have to be converted to <bytes> strings
+    """
+    if 'data' in state:
+        if state['data'] is not None:
+            state['data'] = state['data'].encode('utf-8')
+    for key in list(state.keys()):
+        if key.endswith('.data'):
+            if state[key] is not None:
+                state[key] = state[key].encode('utf-8')
+    return state
+
+
 class TestServerRequestHandler(tornado.web.RequestHandler):
     def initialize(self, test_server):
         self._server = test_server
@@ -266,8 +296,9 @@ class TestServer(object):
             for key in keys:
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
+                    state = bytes_to_unicode(getattr(self, key))
                     with open(getattr(self, attr), 'w') as out:
-                        json.dump(getattr(self, key), out)
+                        json.dump(state, out)
 
     def load_state(self, keys=None):
         if self._engine == 'subprocess':
@@ -279,8 +310,10 @@ class TestServer(object):
                     try:
                         with open(getattr(self, attr)) as inp:
                             content = inp.read()
-                        setattr(self, key, json.loads(content))
+                        state = prepare_loaded_state(json.loads(content))
+                        setattr(self, key, state)
                     except Exception as ex:
+                        logging.error('', exc_info=ex)
                         raise Exception('%s, %s, file_content: [%s]' % (
                             str(ex), attr, content))
 
