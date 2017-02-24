@@ -12,10 +12,9 @@ function:
     use settter/getter functions to access request and response because the
     API and test server work in different processes.
 """
-from unittest import TestCase
+# pylint: disable=redefined-outer-name
 import time
 from threading import Thread
-import itertools
 
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.error import HTTPError
@@ -50,9 +49,9 @@ def skip_by_engine(request, opt_engine):
 @pytest.mark.skip_engine('subprocess')
 def test_get(server):
     valid_data = b'zorro'
-    #server.response['data'] = valid_data
-    #data = urlopen(server.get_url()).read()
-    #assert data == valid_data
+    server.response['data'] = valid_data
+    data = urlopen(server.get_url()).read()
+    assert data == valid_data
 
 
 def test_get_with_state(server):
@@ -93,6 +92,7 @@ def test_post(server):
     assert data == b'resp-data'
     assert server.request['data'] == b'req-data'
 
+
 def test_post_with_state(server):
     server.set_response('post.data', b'resp-data')
     data = urlopen(server.get_url(), b'req-data').read()
@@ -107,27 +107,27 @@ def test_data_generator(server):
         yield b'two'
 
     server.response['get.data'] = gen()
-    assert b'one' == urlopen(server.get_url()).read()
-    assert b'two' == urlopen(server.get_url()).read()
+    assert urlopen(server.get_url()).read() == b'one'
+    assert urlopen(server.get_url()).read() == b'two'
     with pytest.raises(HTTPError):
-       urlopen(server.get_url())
+        urlopen(server.get_url())
 
 
 @pytest.mark.skip_engine('subprocess')
 def test_response_once_get(server):
     server.response['data'] = b'base'
-    assert b'base' == urlopen(server.get_url()).read()
+    assert urlopen(server.get_url()).read() == b'base'
     server.response_once['data'] = b'tmp'
-    assert b'tmp' == urlopen(server.get_url()).read()
-    assert b'base' == urlopen(server.get_url()).read()
+    assert urlopen(server.get_url()).read() == b'tmp'
+    assert urlopen(server.get_url()).read() == b'base'
 
 
 def test_response_once_get_with_state(server):
     server.set_response('data', b'base')
-    assert b'base' == urlopen(server.get_url()).read()
+    assert urlopen(server.get_url()).read() == b'base'
     server.set_response_once('data', b'tmp')
-    assert b'tmp' == urlopen(server.get_url()).read()
-    assert b'base' == urlopen(server.get_url()).read()
+    assert urlopen(server.get_url()).read() == b'tmp'
+    assert urlopen(server.get_url()).read() == b'base'
 
 
 @pytest.mark.skip_engine('subprocess')
@@ -257,8 +257,7 @@ def test_response_once_code(server):
     assert info.getcode() == 200
 
 
-@pytest.mark.skip_engine('subprocess')
-def test_response_once_code(server):
+def test_response_once_code_with_state(server):
     info = urlopen(server.get_url())
     assert info.getcode() == 200
     server.set_response_once('code', 403)
@@ -275,7 +274,7 @@ def test_request_done_after_start(server):
     assert server.request['done'] is False
 
 
-def test_request_done_after_start(server):
+def test_request_done_after_start_with_state(server):
     server = TestServer(port=server.port + 1)
     server.start()
     assert server.get_request('done') is False
@@ -288,7 +287,7 @@ def test_request_done(server):
     assert server.request['done'] is True
 
 
-def test_request_done(server):
+def test_request_done_with_state(server):
     assert server.get_request('done') is False
     urlopen(server.get_url()).read()
     assert server.get_request('done') is True
@@ -304,7 +303,7 @@ def test_wait_request(server):
 
 def test_wait_timeout_error(server):
     """Need many iterations to be sure"""
-    for x in range(100):
+    for _ in range(100):
         with pytest.raises(WaitTimeoutError):
             server.wait_request(0.01)
 
@@ -353,8 +352,7 @@ def test_custom_header_content_type(server):
     assert info.headers['content-type'] == 'text/html; charset=koi8-r'
 
 
-@pytest.mark.skip_engine_with_state('subprocess')
-def test_custom_header_content_type(server):
+def test_custom_header_content_type_with_state(server):
     server.set_response('headers', [
         ('Content-Type', 'text/html; charset=koi8-r'),
     ])
@@ -376,7 +374,7 @@ def test_custom_header_server(server):
     assert info.headers['server'] == 'Google'
 
 
-def test_custom_header_server(server):
+def test_custom_header_server_with_state(server):
     server.set_response('headers', [
         ('Server', 'Google'),
     ])
@@ -399,11 +397,10 @@ def test_options_method(server):
     req = RequestWithMethod(url=server.get_url(),
                             method='OPTIONS')
     info = urlopen(req)
-    assert 'OPTIONS' == server.request['method']
-    assert b'abc' == info.read()
+    assert server.request['method'] == 'OPTIONS'
+    assert info.read() == b'abc'
 
 
-@pytest.mark.skip_engine('subprocess')
 def test_options_method_with_state(server):
     server.set_response('data', b'abc')
 
@@ -418,18 +415,18 @@ def test_options_method_with_state(server):
     req = RequestWithMethod(url=server.get_url(),
                             method='OPTIONS')
     info = urlopen(req)
-    assert 'OPTIONS' == server.get_request('method')
-    assert b'abc' == info.read()
+    assert server.get_request('method') == 'OPTIONS'
+    assert info.read() == b'abc'
 
 
 def test_multiple_start_stop_cycles(server):
     server.stop()
-    for x in range(30):
+    for _ in range(30):
         server = TestServer()
         server.start()
         try:
             server.response['data'] = b'zorro'
-            for y in range(10):
+            for _ in range(10):
                 data = urlopen(server.get_url()).read()
                 assert data == server.response['data']
         finally:
@@ -456,5 +453,5 @@ def test_extra_ports_subprocess_engine():
     port = 9878
     extra_ports = [9879, 9880]
     with pytest.raises(TestServerRuntimeError):
-        server = TestServer(port=port, extra_ports=extra_ports,
-                            engine='subprocess', role='master')
+        TestServer(port=port, extra_ports=extra_ports,
+                   engine='subprocess', role='master')

@@ -1,5 +1,4 @@
 from threading import Thread
-import tornado.web
 import time
 import collections
 import logging
@@ -10,22 +9,22 @@ import json
 from subprocess import Popen
 import signal
 import atexit
-import psutil
 
+from six.moves.urllib.parse import urljoin
+import six
+from six.moves.urllib.request import urlopen
 from filelock import FileLock
+import psutil
+import tornado.web
 from tornado.locks import Semaphore
 import tornado.gen
 from tornado.httpserver import HTTPServer
 from tornado.ioloop import IOLoop
-from six.moves.urllib.parse import urljoin
-import six
-from six.moves.urllib.request import urlopen
 
 from test_server.error import TestServerRuntimeError
-import test_server
 
 __all__ = ('TestServer', 'WaitTimeoutError')
-logger = logging.getLogger('test_server.server')
+logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
 
 class WaitTimeoutError(Exception):
     pass
@@ -80,7 +79,8 @@ def prepare_loaded_state(state):
 
 
 class TestServerRequestHandler(tornado.web.RequestHandler):
-    def initialize(self, test_server):
+    # pylint: disable=abstract-method,protected-access
+    def initialize(self, test_server): # pylint: disable=arguments-differ
         self._server = test_server
 
     def get_param(self, key, method='get', clear_once=True):
@@ -113,6 +113,8 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
     @tornado.web.asynchronous
     @tornado.gen.engine
     def request_handler(self):
+        from test_server import __version__
+
         with (yield self._server._locks['request_handler'].acquire()):
             self._server.load_response_state()
             # Remove some standard tornado headers
@@ -200,7 +202,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                          'text/html; charset=%s' % charset))
                 if 'server' not in header_keys:
                     response['headers'].append(
-                        ('Server', 'TestServer/%s' % test_server.__version__))
+                        ('Server', 'TestServer/%s' % __version__))
 
                 self.set_status(response['code'])
                 for key, val in response['headers']:
@@ -245,7 +247,8 @@ class TestServer(object):
                 ' for subprocess engine'
             )
         self._handler = None
-        self._thread = None
+        self._thread = None # thread instance if thread engine
+        self._proc = None # Process instance if subprocess engine
         self._engine = engine
         self._role = role
         self.request_file = None
@@ -260,16 +263,16 @@ class TestServer(object):
         # Restrict any activity untill the reset method
         # will setup initial content of request/respone files
         if role == 'master' and engine == 'subprocess':
-                hdl, self.request_file = tempfile.mkstemp()
-                os.close(hdl)
-                hdl, self.response_file = tempfile.mkstemp()
-                os.close(hdl)
-                hdl, self.response_once_file = tempfile.mkstemp()
-                os.close(hdl)
-                print('Request file: %s' % self.request_file)
-                print('Response file: %s' % self.response_file)
-                print('Response_once file: %s'
-                      % self.response_once_file)
+            hdl, self.request_file = tempfile.mkstemp()
+            os.close(hdl)
+            hdl, self.response_file = tempfile.mkstemp()
+            os.close(hdl)
+            hdl, self.response_once_file = tempfile.mkstemp()
+            os.close(hdl)
+            print('Request file: %s' % self.request_file)
+            print('Response file: %s' % self.response_file)
+            print('Response_once file: %s'
+                  % self.response_once_file)
         if role == 'server' and engine == 'subprocess':
             self.request_file = kwargs['request_file']
             self.response_file = kwargs['response_file']
@@ -285,7 +288,7 @@ class TestServer(object):
             'response_file': (FileLock(self.response_lock_file)
                               if self.response_file else None),
             'response_once_file': (FileLock(self.response_once_lock_file)
-                              if self.response_once_file else None),
+                                   if self.response_once_file else None),
         }
         self.reset()
 
@@ -398,21 +401,21 @@ class TestServer(object):
 
             try_limit = 10
             try_pause = 1 / float(try_limit)
-            for x in range(try_limit):
+            for count in range(try_limit):
                 try:
                     server.listen(port, self.address)
                 except OSError:
-                    if x == (try_limit - 1):
+                    if count == (try_limit - 1):
                         raise
                     else:
                         logging.debug('Socket %s:%d is busy, '
-                                      'waiting %.2f seconds.'
-                                      % (self.address, self.port, try_pause))
+                                      'waiting %.2f seconds.',
+                                      self.address, self.port, try_pause)
                         time.sleep(0.1)
                 else:
                     break
 
-            logger.debug('Listening on port %d' % port)
+            logger.debug('Listening on port %d', port)
             servers.append(server)
 
         try:
@@ -428,19 +431,21 @@ class TestServer(object):
         """Create new thread with tornado loop and start there
         HTTP server."""
 
-        self.is_stopped = False
+        #self.is_stopped = False
 
         if self._engine == 'thread' or self._role == 'server':
-            self._thread = Thread(target=self.main_loop_function, args=[keep_alive])
+            self._thread = Thread(target=self.main_loop_function,
+                                  args=[keep_alive])
             self._thread.daemon = daemon
             self._thread.start()
         elif self._engine == 'subprocess':
-            self._proc = Popen(['test_server',
-                                '%s:%d' % (self.address, self.port),
-                                '--req', self.request_file,
-                                '--resp', self.response_file,
-                                '--resp-once', self.response_once_file,
-                                ])
+            self._proc = Popen([
+                'test_server',
+                '%s:%d' % (self.address, self.port),
+                '--req', self.request_file,
+                '--resp', self.response_file,
+                '--resp-once', self.response_once_file,
+            ])
 
             def kill_child():
                 try:
@@ -449,18 +454,15 @@ class TestServer(object):
                     pass
 
             atexit.register(kill_child)
-                                                  
 
         if self._role == 'master':
             try_limit = 10
             try_pause = 0.5 / float(try_limit)
-            for x in range(try_limit):
+            for count in range(try_limit):
                 try:
-                    #with open(self.response_file) as inp:
-                    #    print('response-file: %s' % inp.read())
                     urlopen(self.get_url()).read()
-                except Exception as ex:
-                    if x == (try_limit - 1):
+                except Exception: # pylint: disable=broad-except
+                    if count == (try_limit - 1):
                         raise
                     else:
                         time.sleep(try_pause)
@@ -472,12 +474,12 @@ class TestServer(object):
     def stop(self):
         "Stop tornado loop and wait for thread finished it work"
         if ((self._role == 'master' and self._engine == 'thread')
-            or self._role == 'server'):
+                or self._role == 'server'):
             self.ioloop.stop()
             self._thread.join()
-        if (self._role == 'master' and self._engine == 'subprocess'):
+        if self._role == 'master' and self._engine == 'subprocess':
             kill_process(self._proc.pid)
-        self.is_stopped = True
+        #self.is_stopped = True
 
     def get_url(self, extra='', port=None):
         "Build URL that is served by HTTP server"
@@ -525,8 +527,7 @@ def script_test_server():
                             response_file=opts.resp,
                             response_once_file=opts.resp_once,
                             engine='subprocess',
-                            role='server',
-                            )
+                            role='server')
         server.start()
         server.reset()
         while True:
