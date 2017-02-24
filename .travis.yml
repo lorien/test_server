@@ -4,21 +4,31 @@ sudo: required
 
 matrix:
   include:
+    # code quality
     - os: linux
       python: 3.4
       env: TOX_ENV=qa
+
+    # OSX engine=thread
     - os: osx
       language: generic
       env: TOX_ENV=py27
     - os: osx
       language: generic
       env: TOX_ENV=py36
+
+    # OSX engine=subprocess
+    - os: osx
+      language: generic
+      env: TOX_ENV=py27-engine-subprocess
+    - os: osx
+      language: generic
+      env: TOX_ENV=py36-engine-subprocess
+
+    # Linux engine=thread
     - os: linux
       language: python
       env: TOX_ENV=py27
-    - os: linux
-      language: python
-      env: TOX_ENV=py33
     - os: linux
       language: python
       env: TOX_ENV=py34
@@ -30,6 +40,22 @@ matrix:
       language: python
       python: 3.6
       env: TOX_ENV=py36
+
+    # Linux engine=subprocess
+    - os: linux
+      language: python
+      env: TOX_ENV=py27-engine-subprocess
+    - os: linux
+      language: python
+      env: TOX_ENV=py34-engine-subprocess
+    - os: linux
+      language: python
+      python: 3.5
+      env: TOX_ENV=py35-engine-subprocess
+    - os: linux
+      language: python
+      python: 3.6
+      env: TOX_ENV=py36-engine-subprocess
   exclude:
     - python: 2.7 # hack to exclude default no-env travis job
 
