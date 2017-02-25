@@ -1,2 +1,19 @@
+[MASTER]
+jobs=4
+extension-pkg-whitelist=pytest
+
+[TYPECHEK]
+ignored-modules=six.moves.urllib
+
 [MESSAGES CONTROL]
-disable=locally-disabled
+disable=R,I,fixme,missing-docstring
+
+[REPORTS]
+reports=no
+
+[BASIC]
+method-rgx=([a-z_][a-z0-9_]{2,30}|test_[a-z_][a-z0-9_]{2,50})$
+function-rgx=([a-z_][a-z0-9_]{2,30}|test_[a-z_][a-z0-9_]{2,50})$
+
+[FORMAT]
+max-line-length=79

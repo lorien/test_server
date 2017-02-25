@@ -15,3 +15,5 @@
 /dist/
 /coverage.xml
 /.cache/
+/build/
+/.coverage*
