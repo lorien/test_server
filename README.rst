@@ -5,6 +5,9 @@ Test-server
 .. image:: https://travis-ci.org/lorien/test_server.png?branch=master
     :target: https://travis-ci.org/lorien/test_server
 
+.. image:: https://ci.appveyor.com/api/projects/status/o3qhdh1gprcu1x1x
+    :target: https://ci.appveyor.com/project/lorien/test-server
+
 .. image:: https://coveralls.io/repos/lorien/test_server/badge.svg?branch=master
     :target: https://coveralls.io/r/lorien/test_server?branch=master
 
