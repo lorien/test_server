@@ -1,5 +1,9 @@
 # Change Log of test-server Library
 
+## [0.0.26] - Unreleased
+### Added
+- Nothing yet
+
 ## [0.0.25] - 2017-02-25
 ### Added
 - Option to run the server in subprocess
