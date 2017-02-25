@@ -470,7 +470,7 @@ class TestServer(object):
 
         if self._role == 'master':
             try_limit = 10
-            try_pause = 0.5 / float(try_limit)
+            try_pause = 1 / float(try_limit)
             for count in range(try_limit):
                 try:
                     urlopen(self.get_url()).read()
