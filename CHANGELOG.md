@@ -1,8 +1,11 @@
 # Change Log of test-server Library
 
-## [0.0.26] - Unreleased
-### Added
-- Nothing yet
+## [0.0.27] - Unreleased
+### TODO
+
+## [0.0.26] - 2017-02-26
+### Fixed
+- Fix missing filelock dependency in setup.py
 
 ## [0.0.25] - 2017-02-25
 ### Added
