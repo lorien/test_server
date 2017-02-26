@@ -9,6 +9,7 @@ import json
 from subprocess import Popen
 import signal
 import atexit
+from socket import AF_INET
 
 from six.moves.urllib.parse import urljoin
 import six
@@ -23,6 +24,7 @@ from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
 
 from test_server.error import TestServerRuntimeError
+from test_server.util import DeprecatedAttribute
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
@@ -94,29 +96,29 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
     def get_param(self, key, method='get', clear_once=True):
         method_key = '%s.%s' % (method, key)
 
-        if method_key in self._server.response_once:
-            value = self._server.response_once[method_key]
+        if method_key in self._server._response_once:
+            value = self._server._response_once[method_key]
             if clear_once:
-                del self._server.response_once[method_key]
+                del self._server._response_once[method_key]
                 self._server.save_state(['response_once'])
             return value
-        elif key in self._server.response_once:
-            value = self._server.response_once[key]
+        elif key in self._server._response_once:
+            value = self._server._response_once[key]
             if clear_once:
-                del self._server.response_once[key]
+                del self._server._response_once[key]
                 self._server.save_state(['response_once'])
             return value
         elif method_key in self._server.response:
-            return self._server.response[method_key]
-        elif key in self._server.response:
-            return self._server.response[key]
+            return self._server._response[method_key]
+        elif key in self._server._response:
+            return self._server._response[key]
         else:
             raise TestServerRuntimeError('Parameter %s does not exists in '
                                          'server response data' % key)
 
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
-        return value.decode(self._server.request['charset'])
+        return value.decode(self._server._request['charset'])
 
     @tornado.web.asynchronous
     @tornado.gen.engine
@@ -136,22 +138,22 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
             if sleep:
                 yield tornado.gen.Task(self._server.ioloop.add_timeout,
                                        time.time() + sleep)
-            self._server.request['client_ip'] = self.request.remote_ip
-            self._server.request['args'] = {}
+            self._server._request['client_ip'] = self.request.remote_ip
+            self._server._request['args'] = {}
             for key in self.request.arguments.keys():
-                self._server.request['args'][key] = self.get_argument(key)
+                self._server._request['args'][key] = self.get_argument(key)
             if self._server._engine == 'subprocess':
-                self._server.request['headers'] = (
+                self._server._request['headers'] = (
                     list(self.request.headers.get_all())
                 )
             else:
-                self._server.request['headers'] = self.request.headers
-            self._server.request['path'] = self.request.path
-            self._server.request['method'] = self.request.method
-            self._server.request['cookies'] = self.request.cookies
-            charset = self._server.request['charset']
-            self._server.request['data'] = self.request.body
-            self._server.request['files'] = self.request.files
+                self._server._request['headers'] = self.request.headers
+            self._server._request['path'] = self.request.path
+            self._server._request['method'] = self.request.method
+            self._server._request['cookies'] = self.request.cookies
+            charset = self._server._request['charset']
+            self._server._request['data'] = self.request.body
+            self._server._request['files'] = self.request.files
 
             callback = self.get_param('callback', method)
             if callback:
@@ -219,10 +221,10 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                     self.add_header(key, val)
                 self.write(response['data'])
 
-                self._server.request['done'] = True
+                self._server._request['done'] = True
                 self._server.save_request_state()
 
-            self._server.request['done'] = True
+            self._server._request['done'] = True
             self._server.save_request_state()
 
             if not callback:
@@ -236,16 +238,32 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         # when request['done'] is not True after successful
         # request to the test server
         # I thinks it is about race-codition
-        self._server.request['done'] = True
+        self._server._request['done'] = True
+        self._server.save_request_state()
         super(TestServerRequestHandler, self).finish(*args, **kwargs)
 
 
 class TestServer(object):
-    request = {}
-    response = {}
-    response_once = {}
+    _request = {}
+    _response = {}
+    _response_once = {}
+    request = DeprecatedAttribute(
+        '_request',
+        'Attribute request is deprecated. Use set_request and'
+        ' get_request methods instead.',
+    )
+    response = DeprecatedAttribute(
+        '_response',
+        'Attribute response is deprecated. Use set_response and'
+        ' get_response methods instead.',
+    )
+    response_once = DeprecatedAttribute(
+        '_response_once',
+        'Attribute response_once is deprecated. Use set_response_once and'
+        ' get_response_once methods instead.',
+    )
 
-    def __init__(self, port=9876, address='127.0.0.1', extra_ports=None,
+    def __init__(self, port=0, address='127.0.0.1', extra_ports=None,
                  engine='thread', role='master', **kwargs):
         assert engine in ('thread', 'subprocess')
         self.port = port
@@ -342,30 +360,52 @@ class TestServer(object):
     def load_request_state(self):
         self.load_state(['request'])
 
-    def set_response(self, key, val):
+    def get_response(self, key):
         """
-        Change response and save it state to file
+        Load response state and return value of specified key
         """
-        self.response[key] = val
-        self.save_response_state()
+        self.load_response_state()
+        return self._response[key]
 
-    def set_response_once(self, key, val):
+    def get_response_once(self, key):
         """
-        Change response_once and save it state to file
+        Load response_once state and return value of specified key
         """
-        self.response_once[key] = val
-        self.save_response_state()
+        self.load_response_once_state()
+        return self._response_once[key]
 
     def get_request(self, key):
         """
         Load request state and return value of specified key
         """
         self.load_request_state()
-        return self.request[key]
+        return self._request[key]
+
+    def set_response(self, key, val):
+        """
+        Change response and save it state to file
+        """
+        self._response[key] = val
+        self.save_response_state()
+
+
+    def set_response_once(self, key, val):
+        """
+        Change response_once and save it state to file
+        """
+        self._response_once[key] = val
+        self.save_response_state()
+
+    def set_request(self, key, val):
+        """
+        Set request state and save its state
+        """
+        self._request[key] = val
+        self.save_request_state()
 
     def reset(self):
-        self.request.clear()
-        self.request.update({
+        self._request.clear()
+        self._request.update({
             'args': {},
             'headers': {},
             'cookies': None,
@@ -377,8 +417,8 @@ class TestServer(object):
             'client_ip': None,
             'done': False,
         })
-        self.response.clear()
-        self.response.update({
+        self._response.clear()
+        self._response.update({
             'code': 200,
             'data': '',
             'headers': [],
@@ -386,7 +426,7 @@ class TestServer(object):
             'callback': None,
             'sleep': None,
         })
-        self.response_once.clear()
+        self._response_once.clear()
         self.save_request_state()
         self.save_response_state()
 
@@ -405,6 +445,15 @@ class TestServer(object):
         ports = [self.port] + self.extra_ports
         servers = []
         for port in ports:
+            socket = None
+            if port == 0:
+                assert self.port == 0
+                assert 0 not in self.extra_ports
+                from tornado.netutil import bind_sockets
+                socket = bind_sockets(0, self.address,
+                                      family=AF_INET)[0]
+                port = self.port = int(socket.getsockname()[1])
+
             app = self._build_web_app()
             app.listen_port = port
             server = HTTPServer(app, no_keep_alive=not keep_alive)
@@ -413,7 +462,10 @@ class TestServer(object):
             try_pause = 1 / float(try_limit)
             for count in range(try_limit):
                 try:
-                    server.listen(port, self.address)
+                    if socket:
+                        server.add_sockets([socket])
+                    else:
+                        server.listen(port, self.address)
                 except OSError:
                     if count == (try_limit - 1):
                         raise
