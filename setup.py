@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.realpath(__file__))
 
 setup(
     name='test-server',
-    version='0.0.25',
+    version='0.0.26',
     description='Server to test HTTP clients',
     long_description=open(os.path.join(ROOT, 'README.rst')).read(),
     author='Gregory Petukhov',
