@@ -11,7 +11,7 @@ setup(
     long_description=open(os.path.join(ROOT, 'README.rst')).read(),
     author='Gregory Petukhov',
     author_email='lorien@lorien.name',
-    install_requires=['tornado', 'six', 'psutil'],
+    install_requires=['tornado', 'six', 'psutil', 'filelock'],
     packages=['test_server'],
     license="MIT",
     entry_points={
