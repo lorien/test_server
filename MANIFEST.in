@@ -1,0 +1,11 @@
+include CHANGELOG.md
+include conftest.py
+include docs
+include .flake8
+include Makefile
+include pylintrc
+include pytest.ini
+include README.rst
+include requirements_dev.txt
+recursive_include test *.py
+include tox.ini
