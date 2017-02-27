@@ -109,7 +109,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                 del self._server._response_once[key]
                 self._server.save_state(['response_once'])
             return value
-        elif method_key in self._server.response:
+        elif method_key in self._server._response:
             return self._server._response[method_key]
         elif key in self._server._response:
             return self._server._response[key]
@@ -277,6 +277,7 @@ class TestServer(object):
         self.request_file = None
         self.response_file = None
         self.response_once_file = None
+        self.config_file = None
         self.request_lock_file = None
         self.response_lock_file = None
         self.response_once_lock_file = None
@@ -292,18 +293,23 @@ class TestServer(object):
             os.close(hdl)
             hdl, self.response_once_file = tempfile.mkstemp()
             os.close(hdl)
+            hdl, self.config_file = tempfile.mkstemp()
+            os.close(hdl)
             print('Request file: %s' % self.request_file)
             print('Response file: %s' % self.response_file)
             print('Response_once file: %s'
                   % self.response_once_file)
+            print('config file: %s' % self.config_file)
         if role == 'server' and engine == 'subprocess':
             self.request_file = kwargs['request_file']
             self.response_file = kwargs['response_file']
             self.response_once_file = kwargs['response_once_file']
+            self.config_file = kwargs['config_file']
         if engine == 'subprocess':
             self.request_lock_file = self.request_file + '.lock'
             self.response_lock_file = self.response_file + '.lock'
             self.response_once_lock_file = self.response_once_file + '.lock'
+            self.config_lock_file = self.config_file + '.lock'
         self._locks = {
             'request_handler': Semaphore(),
             'request_file': (FileLock(self.request_lock_file)
@@ -312,6 +318,11 @@ class TestServer(object):
                               if self.response_file else None),
             'response_once_file': (FileLock(self.response_once_lock_file)
                                    if self.response_once_file else None),
+            'config_file': (FileLock(self.config_lock_file)
+                            if self.config_file else None),
+        }
+        self._config = {
+            'port': self.port,
         }
         self.reset()
 
@@ -322,7 +333,7 @@ class TestServer(object):
             for key in keys:
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
-                    state = bytes_to_unicode(getattr(self, key))
+                    state = bytes_to_unicode(getattr(self, '_%s' % key))
                     with open(getattr(self, attr), 'w') as out:
                         json.dump(state, out)
 
@@ -333,15 +344,10 @@ class TestServer(object):
             for key in keys:
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
-                    try:
-                        with open(getattr(self, attr)) as inp:
-                            content = inp.read()
-                        state = prepare_loaded_state(key, json.loads(content))
-                        setattr(self, key, state)
-                    except Exception as ex:
-                        logging.error('', exc_info=ex)
-                        raise Exception('%s, %s, file_content: [%s]' % (
-                            str(ex), attr, content))
+                    with open(getattr(self, attr)) as inp:
+                        content = inp.read()
+                    state = prepare_loaded_state(key, json.loads(content))
+                    setattr(self, '_%s' % key, state)
 
     def save_response_state(self):
         self.save_state(['response', 'response_once'])
@@ -442,6 +448,10 @@ class TestServer(object):
             socket = bind_sockets(0, self.address,
                                   family=AF_INET)[0]
             self.port = int(socket.getsockname()[1])
+            self._config['port'] = self.port
+
+        if self._engine == 'subprocess':
+            self.save_state(['config'])
 
         app = self._build_web_app()
         #app.listen_port = self.port
@@ -493,6 +503,7 @@ class TestServer(object):
                 '--req', self.request_file,
                 '--resp', self.response_file,
                 '--resp-once', self.response_once_file,
+                '--config', self.config_file,
             ])
 
             def kill_child():
@@ -507,6 +518,25 @@ class TestServer(object):
             raise Exception('Should not be raised ever')
 
         if self._role == 'master':
+            if self._engine == 'subprocess':
+                config_loaded = False
+                try_limit = 50
+                try_pause = 1 / float(try_limit)
+                for count in range(try_limit):
+                    try:
+                        self.load_state(['config'])
+                    except ValueError:
+                        time.sleep(try_pause)
+                    else:
+                        config_loaded = True
+                        break
+                if not config_loaded:
+                    raise TestServerRuntimeError(
+                        'Could not load from master process the config file'
+                        ' saved by server process'
+                    )
+                self.port = self._config['port']
+
             try_limit = 10
             try_pause = 1 / float(try_limit)
             for count in range(try_limit):
@@ -538,9 +568,11 @@ class TestServer(object):
             self.request_file,
             self.response_file,
             self.response_once_file,
+            self.config_file,
             self.request_lock_file,
             self.response_lock_file,
             self.response_once_lock_file,
+            self.config_lock_file,
         )
         for file_ in files:
             try:
@@ -548,11 +580,11 @@ class TestServer(object):
             except OSError:
                 pass
 
-    def get_url(self, extra='', port=None):
+    def get_url(self, path='', port=None):
         "Build URL that is served by HTTP server"
         if port is None:
             port = self.port
-        return urljoin('http://%s:%d/' % (self.address, port), extra)
+        return urljoin('http://%s:%d/' % (self.address, port), path)
 
     def wait_request(self, timeout):
         """Stupid implementation that eats CPU"""
@@ -576,6 +608,7 @@ def script_test_server():
         parser.add_argument('--req')
         parser.add_argument('--resp')
         parser.add_argument('--resp-once')
+        parser.add_argument('--config')
         opts = parser.parse_args()
         if opts.req is None:
             sys.stderr.write('Option --req is not specified\n')
@@ -586,6 +619,9 @@ def script_test_server():
         if opts.resp_once is None:
             sys.stderr.write('Option --resp-once is not specified\n')
             sys.exit(1)
+        if opts.config is None:
+            sys.stderr.write('Option --config is not specified\n')
+            sys.exit(1)
         host, port = opts.address.split(':')
         port = int(port)
         server = TestServer(address=host,
@@ -593,6 +629,7 @@ def script_test_server():
                             request_file=opts.req,
                             response_file=opts.resp,
                             response_once_file=opts.resp_once,
+                            config_file=opts.config,
                             engine='subprocess',
                             role='server')
         server.start()

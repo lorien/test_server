@@ -218,38 +218,30 @@ def test_options_method_with_state(server):
     assert info.read() == b'abc'
 
 
-def test_multiple_start_stop_cycles(server):
-    try:
-        server.stop()
-        for _ in range(30):
-            server2 = TestServer()
-            server2.start()
-            try:
-                server2.set_response('data', b'zorro')
-                for _ in range(10):
-                    data = urlopen(server2.get_url()).read()
-                    assert data == b'zorro'
-            finally:
-                server2.stop()
-    finally:
-        server.start()
+def test_multiple_start_stop_cycles():
+    for _ in range(30):
+        server2 = TestServer()
+        server2.start()
+        try:
+            server2.set_response('data', b'zorro')
+            for _ in range(10):
+                data = urlopen(server2.get_url()).read()
+                assert data == b'zorro'
+        finally:
+            server2.stop()
 
 
 @pytest.mark.skip_engine('thread')
-def test_temp_files_are_removed(server):
-    try:
-        server.stop()
-        server2 = TestServer(engine='subprocess')
-        server2.start()
-        files = [
-            server2.request_file,
-            server2.response_file,
-            server2.response_once_file,
-            server2.request_lock_file,
-            server2.response_lock_file,
-            server2.response_once_lock_file,
-        ]
-        server2.stop()
-        assert all(not os.path.exists(x) for x in files)
-    finally:
-        server.start()
+def test_temp_files_are_removed():
+    server2 = TestServer(engine='subprocess')
+    server2.start()
+    files = [
+        server2.request_file,
+        server2.response_file,
+        server2.response_once_file,
+        server2.request_lock_file,
+        server2.response_lock_file,
+        server2.response_once_lock_file,
+    ]
+    server2.stop()
+    assert all(not os.path.exists(x) for x in files)
