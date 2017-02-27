@@ -21,8 +21,7 @@ from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.error import HTTPError
 import pytest
 
-from test_server import (TestServer, WaitTimeoutError,
-                         TestServerRuntimeError)
+from test_server import TestServer, WaitTimeoutError
 import test_server
 
 
@@ -254,27 +253,3 @@ def test_temp_files_are_removed(server):
         assert all(not os.path.exists(x) for x in files)
     finally:
         server.start()
-
-
-@pytest.mark.skip_engine('subprocess')
-def test_extra_ports():
-    port = 9878
-    extra_ports = [9879, 9880]
-    server = TestServer(port=port, extra_ports=extra_ports)
-    server.start()
-    try:
-        server.set_response('data', b'zorro')
-        for port in [port] + extra_ports:
-            data = urlopen(server.get_url(port=port)).read()
-            assert data == b'zorro'
-    finally:
-        server.stop()
-
-
-@pytest.mark.skip_engine('thread')
-def test_extra_ports_subprocess_engine():
-    port = 9878
-    extra_ports = [9879, 9880]
-    with pytest.raises(TestServerRuntimeError):
-        TestServer(port=port, extra_ports=extra_ports,
-                   engine='subprocess', role='master')

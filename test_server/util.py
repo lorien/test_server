@@ -22,10 +22,11 @@ class DeprecatedAttribute(object):
         warn(self.msg, stacklevel=3)
         setattr(obj, self.valid_name, val)
 
-    def __get__(self, obj, type=None):
+    def __get__(self, obj, type=None): # pylint: disable=redefined-builtin
         warn(self.msg, stacklevel=3)
         return getattr(obj, self.valid_name)
 
+    # pylint: disable=unexpected-special-method-signature
     def __del__(self, obj):
         warn(self.msg, stacklevel=3)
         delattr(obj, self.valid_name)

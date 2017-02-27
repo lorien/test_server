@@ -11,7 +11,8 @@ from six.moves.urllib.error import HTTPError
 import pytest
 
 from test_server import TestServer
-from .server import global_server, server, skip_by_engine
+from .server import (global_server, # pylint: disable=unused-import
+                     server, skip_by_engine)
 
 
 @pytest.mark.foo

@@ -5,13 +5,12 @@ These things could not be used in subprocess engine
 because it is not possible to save them in state-share files.
 """
 # pylint: disable=redefined-outer-name
-import time
-
 from six.moves.urllib.request import urlopen
 from six.moves.urllib.error import HTTPError
 import pytest
 
-from .server import global_server, server, skip_by_engine
+from .server import (global_server, # pylint: disable=unused-import
+                     server, skip_by_engine)
 
 
 @pytest.mark.skip_engine('subprocess')

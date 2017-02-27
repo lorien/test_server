@@ -22,6 +22,7 @@ import tornado.gen
 from tornado.httpserver import HTTPServer
 from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
+from tornado.netutil import bind_sockets
 
 from test_server.error import TestServerRuntimeError
 from test_server.util import DeprecatedAttribute
@@ -189,7 +190,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                     response['headers'].append((key, value))
 
                 response['headers'].append(
-                    ('Listen-Port', str(self.application.listen_port)))
+                    ('Listen-Port', str(self._server.port)))
 
                 data = self.get_param('data', method)
                 if isinstance(data, six.string_types):
@@ -263,17 +264,11 @@ class TestServer(object):
         ' get_response_once methods instead.',
     )
 
-    def __init__(self, port=0, address='127.0.0.1', extra_ports=None,
+    def __init__(self, port=0, address='127.0.0.1',
                  engine='thread', role='master', **kwargs):
         assert engine in ('thread', 'subprocess')
         self.port = port
         self.address = address
-        self.extra_ports = list(extra_ports or [])
-        if engine == 'subprocess' and extra_ports:
-            raise TestServerRuntimeError(
-                'Option `extra_ports` is not supported'
-                ' for subprocess engine'
-            )
         self._handler = None
         self._thread = None # thread instance if thread engine
         self._proc = None # Process instance if subprocess engine
@@ -371,7 +366,7 @@ class TestServer(object):
         """
         Load response_once state and return value of specified key
         """
-        self.load_response_once_state()
+        self.load_response_state()
         return self._response_once[key]
 
     def get_request(self, key):
@@ -442,52 +437,43 @@ class TestServer(object):
          * start HTTP server
          * start tornado loop"""
         self.ioloop.make_current()
-        ports = [self.port] + self.extra_ports
-        servers = []
-        for port in ports:
-            socket = None
-            if port == 0:
-                assert self.port == 0
-                assert 0 not in self.extra_ports
-                from tornado.netutil import bind_sockets
-                socket = bind_sockets(0, self.address,
-                                      family=AF_INET)[0]
-                port = self.port = int(socket.getsockname()[1])
+        socket = None
+        if self.port == 0:
+            socket = bind_sockets(0, self.address,
+                                  family=AF_INET)[0]
+            self.port = int(socket.getsockname()[1])
 
-            app = self._build_web_app()
-            app.listen_port = port
-            server = HTTPServer(app, no_keep_alive=not keep_alive)
+        app = self._build_web_app()
+        #app.listen_port = self.port
+        server = HTTPServer(app, no_keep_alive=not keep_alive)
 
-            try_limit = 10
-            try_pause = 1 / float(try_limit)
-            for count in range(try_limit):
-                try:
-                    if socket:
-                        server.add_sockets([socket])
-                    else:
-                        server.listen(port, self.address)
-                except OSError:
-                    if count == (try_limit - 1):
-                        raise
-                    else:
-                        logging.debug('Socket %s:%d is busy, '
-                                      'waiting %.2f seconds.',
-                                      self.address, self.port, try_pause)
-                        time.sleep(0.1)
+        try_limit = 10
+        try_pause = 1 / float(try_limit)
+        for count in range(try_limit):
+            try:
+                if socket:
+                    server.add_sockets([socket])
                 else:
-                    break
+                    server.listen(self.port, self.address)
+            except OSError:
+                if count == (try_limit - 1):
+                    raise
+                else:
+                    logging.debug('Socket %s:%d is busy, '
+                                  'waiting %.2f seconds.',
+                                  self.address, self.port, try_pause)
+                    time.sleep(0.1)
+            else:
+                break
 
-            logger.debug('Listening on port %d', port)
-            servers.append(server)
+            logger.debug('Listening on port %d', self.port)
 
         try:
             self.ioloop.start()
         finally:
             # manually close sockets to be able to create
             # other HTTP servers on same sockets
-            for server in servers:
-                # pylint: disable=protected-access
-                server.stop()
+            server.stop()
 
     def start(self, keep_alive=False, daemon=True):
         """Create new thread with tornado loop and start there
