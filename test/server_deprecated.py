@@ -1,5 +1,5 @@
 """
-This module tests deprecated API: direct access to
+This module tests deprecated direct access to
 request, response and response_once attributes.
 You should use methods like get_request, set_response, etc.
 """
@@ -15,7 +15,6 @@ from .server import (global_server, # pylint: disable=unused-import
                      server, skip_by_engine)
 
 
-@pytest.mark.foo
 @pytest.mark.skip_engine('subprocess')
 def test_get(server):
     valid_data = b'zorro'

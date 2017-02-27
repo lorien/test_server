@@ -1,6 +1,8 @@
 test_server documentation
 =========================
 
+.. module:: test_server.server
+
 The test_server packages provides HTTP server that allows you:
 
 * to see details of HTTP request
@@ -20,7 +22,30 @@ Basic example:
     assert req.read() == b'response-data'
     assert server.get_request('data') == b'request-data'
 
-Details of request you can get access to:
+HTTP request details
+--------------------
+
+Parameter of request you can get access to. Each parameter is a key and
+description. Use the key to get the data with :meth:`TestServer:get_request`
+
+request:args
+^^^^^^^^^^^^
+
+:args (dict): query string arguments,
+:headers (<`tornado.netutil.HTTPHeaders`>): HTTP headers
+:cookies (<dict>): the dict mapping cookie's name to its data
+                 Cookie data is a dict with keys: name, value,
+                 path, expires, etc. See possible keys at https://docs.python.org/2/library/cookie.html#morsel-objects
+:path (<str>): path part of request URL
+:method <string>: method of HTTP request
+:charset: charset of HTTP request, parsed from "Content-Type" header.
+:data <bytes>: data part of HTTP request
+:files (???): files sent in request (in case of form/multipart-data).
+:client_ip <str>: IP address of the client sent the request
+:done: the: False,
+
+:foo: bar
+:1: 2
 
 * query string aruments
 * headers
@@ -59,6 +84,8 @@ API
     :maxdepth: 2
 
     api_server
+    api_util
+    api_error
 
 
 Indices and tables

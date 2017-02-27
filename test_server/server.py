@@ -24,7 +24,7 @@ from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
 from tornado.netutil import bind_sockets
 
-from test_server.error import TestServerRuntimeError
+from test_server.error import TestServerError
 from test_server.util import DeprecatedAttribute
 
 __all__ = ('TestServer', 'WaitTimeoutError')
@@ -114,8 +114,8 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         elif key in self._server._response:
             return self._server._response[key]
         else:
-            raise TestServerRuntimeError('Parameter %s does not exists in '
-                                         'server response data' % key)
+            raise TestServerError('Parameter %s does not exists in '
+                                  'server response data' % key)
 
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
@@ -151,7 +151,14 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                 self._server._request['headers'] = self.request.headers
             self._server._request['path'] = self.request.path
             self._server._request['method'] = self.request.method
-            self._server._request['cookies'] = self.request.cookies
+
+            cookies = {}
+            for key, cookie in self.request.cookies.items():
+                cookies[key] = dict(cookie)
+                cookies[key]['name'] = cookie.key
+                cookies[key]['value'] = cookie.value
+            self._server._request['cookies'] = cookies
+
             charset = self._server._request['charset']
             self._server._request['data'] = self.request.body
             self._server._request['files'] = self.request.files
@@ -204,9 +211,9 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                         response['code'] = 405
                         response['data'] = b''
                 else:
-                    raise TestServerRuntimeError('Data parameter should '
-                                                 'be string or iterable '
-                                                 'object')
+                    raise TestServerError('Data parameter should '
+                                          'be string or iterable '
+                                          'object')
 
                 header_keys = [x[0].lower() for x in response['headers']]
                 if 'content-type' not in header_keys:
@@ -439,9 +446,13 @@ class TestServer(object):
         ])
 
     def main_loop_function(self, keep_alive=False):
-        """This is function that is executed in separate thread:
-         * start HTTP server
-         * start tornado loop"""
+        """
+        Ask HTTP server start processing requests.
+
+        This is function that is executed in separate thread:
+        * start HTTP server
+        * start tornado loop
+        """
         self.ioloop.make_current()
         socket = None
         if self.port == 0:
@@ -486,11 +497,7 @@ class TestServer(object):
             server.stop()
 
     def start(self, keep_alive=False, daemon=True):
-        """Create new thread with tornado loop and start there
-        HTTP server."""
-
-        #self.is_stopped = False
-
+        """Start the HTTP server."""
         if self._engine == 'thread' or self._role == 'server':
             self._thread = Thread(target=self.main_loop_function,
                                   args=[keep_alive])
@@ -531,7 +538,7 @@ class TestServer(object):
                         config_loaded = True
                         break
                 if not config_loaded:
-                    raise TestServerRuntimeError(
+                    raise TestServerError(
                         'Could not load from master process the config file'
                         ' saved by server process'
                     )
@@ -553,7 +560,7 @@ class TestServer(object):
             self.reset()
 
     def stop(self):
-        "Stop tornado loop and wait for thread finished it work"
+        """Stop tornado loop and wait for thread finished it work."""
         if ((self._role == 'master' and self._engine == 'thread')
                 or self._role == 'server'):
             self.ioloop.stop()
@@ -581,13 +588,13 @@ class TestServer(object):
                 pass
 
     def get_url(self, path='', port=None):
-        "Build URL that is served by HTTP server"
+        """Build URL that is served by HTTP server."""
         if port is None:
             port = self.port
         return urljoin('http://%s:%d/' % (self.address, port), path)
 
     def wait_request(self, timeout):
-        """Stupid implementation that eats CPU"""
+        """Stupid implementation that eats CPU."""
         start = time.time()
         while True:
             if self.get_request('done'):

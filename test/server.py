@@ -144,6 +144,13 @@ def test_wait_timeout_error(server):
         server.wait_request(0.01)
 
 
+def test_request_cookies(server):
+    req = Request(url=server.get_url())
+    req.add_header('Cookie', 'foo=bar')
+    urlopen(req)
+    assert server.get_request('cookies')['foo']['value'] == 'bar'
+
+
 def test_response_once_cookies(server):
     server.set_response('cookies', [('foo', 'bar')])
     info = urlopen(server.get_url())
