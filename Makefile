@@ -1,4 +1,4 @@
-.PHONY: clean upload
+.PHONY: clean upload viewdoc
 
 clean:
 	find -name '*.pyc' -delete
@@ -7,3 +7,6 @@ clean:
 
 upload:
 	python setup.py sdist upload
+
+viewdoc:
+	x-www-browser docs/_build/html/index.html
