@@ -290,11 +290,11 @@ class TestServer(object):
             os.close(hdl)
             hdl, self.config_file = tempfile.mkstemp()
             os.close(hdl)
-            print('Request file: %s' % self.request_file)
-            print('Response file: %s' % self.response_file)
-            print('Response_once file: %s'
-                  % self.response_once_file)
-            print('config file: %s' % self.config_file)
+            #print('Request file: %s' % self.request_file)
+            #print('Response file: %s' % self.response_file)
+            #print('Response_once file: %s'
+            #      % self.response_once_file)
+            #print('config file: %s' % self.config_file)
         if role == 'server' and engine == 'subprocess':
             self.request_file = kwargs['request_file']
             self.response_file = kwargs['response_file']
@@ -366,6 +366,10 @@ class TestServer(object):
             'client_ip': None,
             'done': False,
         })
+        #print('.reset(): just reset the request!')
+        #print('.reset(): content of request: %s' % self.request.get_dict())
+        #print('.reset(): content of request file: %s'
+        #      % open(self.request_file).read())
         self.response.clear()
         self.response.update({
             'code': 200,
@@ -486,7 +490,7 @@ class TestServer(object):
             try_pause = 1 / float(try_limit)
             for count in range(try_limit):
                 try:
-                    urlopen(self.get_url()).read()
+                    urlopen(self.get_url() + '?method=start').read()
                 except Exception: # pylint: disable=broad-except
                     if count == (try_limit - 1):
                         raise
@@ -534,7 +538,11 @@ class TestServer(object):
         """Stupid implementation that eats CPU."""
         start = time.time()
         while True:
+            #req = self.request.get_dict()
             if self.request['done']:
+            #if req['done']:
+                #print('wait_request [timeout=%s]: req is done: %s'
+                #      % (timeout, req))
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:

@@ -131,15 +131,27 @@ def test_request_done(server):
 
 
 def test_wait_request(server):
+    server.response['data'] = b'foo'
+    #print('.test_wait_request(): started')
+
     def worker():
         time.sleep(1)
-        urlopen(server.get_url()).read()
-    Thread(target=worker).start()
+        urlopen(server.get_url() + '?method=test-wait-request').read()
+        #print('.test_wait_request(): end of thread')
+    th = Thread(target=worker)
+    th.start()
+    with pytest.raises(WaitTimeoutError):
+        server.wait_request(0.5)
     server.wait_request(2)
+    #res = result.get()
+    #assert res == b'foo'
+    th.join()
+    #print('.test_wait_request(): last line')
 
 
 def test_wait_timeout_error(server):
     """Need many iterations to be sure"""
+    #print('.test_wait_timeout_error(): started')
     with pytest.raises(WaitTimeoutError):
         server.wait_request(0.01)
 
