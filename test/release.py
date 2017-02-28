@@ -20,8 +20,8 @@ def test_changelog():
             ver_dates[ver] = date
             ver_history.append(ver)
     release = __version__
-    print(ver_dates)
-    print(ver_history)
+    #print(ver_dates)
+    #print(ver_history)
     assert 'unreleased' not in ver_dates[release]
     assert re_date.match(ver_dates[release])
     assert ver_history.index(release) == 1

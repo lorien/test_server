@@ -52,22 +52,22 @@ def kill_process(pid):
                                        ' test_server')
 
 
-def bytes_to_unicode(obj):
+def bytes_to_unicode(obj, charset):
     if isinstance(obj, six.text_type):
         return obj
     elif isinstance(obj, six.binary_type):
-        return obj.decode('utf-8')
+        return obj.decode(charset)
     elif isinstance(obj, list):
-        return [bytes_to_unicode(x) for x in obj]
+        return [bytes_to_unicode(x, charset) for x in obj]
     elif isinstance(obj, tuple):
-        return tuple((bytes_to_unicode(x) for x in obj))
+        return tuple(bytes_to_unicode(x, charset) for x in obj)
     elif isinstance(obj, dict):
-        return dict(map(bytes_to_unicode, x) for x in obj.items())
+        return dict(bytes_to_unicode(x, charset) for x in obj.items())
     else:
         return obj
 
 
-def prepare_loaded_state(state_key, state, fix_headers=True):
+def prepare_loaded_state(state_key, state, charset, fix_headers=True):
     """
     Fix state loaded from JSON-serialized data:
     * all values of data keys have to be converted to <bytes> strings
@@ -75,11 +75,11 @@ def prepare_loaded_state(state_key, state, fix_headers=True):
     """
     if 'data' in state:
         if state['data'] is not None:
-            state['data'] = state['data'].encode('utf-8')
+            state['data'] = state['data'].encode(charset)
     for key in list(state.keys()):
         if key.endswith('.data'):
             if state[key] is not None:
-                state[key] = state[key].encode('utf-8')
+                state[key] = state[key].encode(charset)
     if state_key == 'request':
         if fix_headers:
             hdr = HTTPHeaders()
@@ -120,13 +120,20 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
 
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
-        # FIXME: why request was used here?
-        return value.decode('utf-8')#self._server.request['charset'])
+        return value.decode(self._server.request['charset'])
 
     @tornado.web.asynchronous
     @tornado.gen.engine
     def request_handler(self):
         from test_server import __version__
+
+        # load request state
+        # required to track request['charset'] if it is set
+        self._server.request.read_callback()
+
+        # FIXME
+        # load response state?? could be same issue as with
+        # request['charset']
 
         with (yield self._server._locks['request_handler'].acquire()):
             # Remove some standard tornado headers
@@ -215,14 +222,12 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                                           'be string or iterable '
                                           'object')
 
-                # FIXME: why request was used here?
-                # FIXME: why request.charset was used to
-                # generate response headers?
-                charset = 'UTF-8'#self._server.request['charset']
                 header_keys = [x[0].lower() for x in response['headers']]
                 if 'content-type' not in header_keys:
                     response['headers'].append(
-                        ('Content-Type', 'text/html; charset=%s' % charset))
+                        ('Content-Type', 'text/html; charset=%s'
+                         % self._server.response['charset'])
+                    )
                 if 'server' not in header_keys:
                     response['headers'].append(
                         ('Server', 'TestServer/%s' % __version__))
@@ -331,9 +336,32 @@ class TestServer(object):
                 with self._locks[attr].acquire(timeout=-1):
                     obj = getattr(self, key)
                     with obj.disable_callbacks():
-                        state = bytes_to_unicode(obj.get_dict())
+                        state = obj.get_dict()
+
+                    if key == 'request':
+                        charset_state = 'request'
+                    else:
+                        charset_state = 'response'
+                    charset_obj = getattr(self, charset_state)
+                    with charset_obj.disable_callbacks():
+                        try:
+                            charset = state['charset']
+                        except KeyError:
+                            try:
+                                charset = charset_obj['charset']
+                            except KeyError:
+                                charset = 'utf-8'
+
+                    #if key == 'request':
+                    #    print('----- save begins -------------------------')
+                    #    print('STATE', state)
+                    #    print('CHARSET', charset)
+                    #    traceback.print_stack()
+                    #    print('----- save ends -------------------------')
+                    with obj.disable_callbacks():
+                        state_prep = bytes_to_unicode(state, charset)
                     with open(getattr(self, attr), 'w') as out:
-                        json.dump(state, out)
+                        json.dump(state_prep, out)
 
     def load_state(self, keys=None):
         if self._engine == 'subprocess':
@@ -343,14 +371,36 @@ class TestServer(object):
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
                     with open(getattr(self, attr)) as inp:
-                        content = inp.read()
+                        raw_content = inp.read()
                     fix_headers = (self._role == 'master')
-                    state = prepare_loaded_state(key, json.loads(content),
-                                                 fix_headers=fix_headers)
+                    state = json.loads(raw_content)
+
+                    if key == 'request':
+                        charset_state = 'request'
+                    else:
+                        charset_state = 'response'
+                    charset_obj = getattr(self, charset_state)
+                    with charset_obj.disable_callbacks():
+                        try:
+                            charset = state['charset']
+                        except KeyError:
+                            try:
+                                charset = charset_obj['charset']
+                            except KeyError:
+                                charset = 'utf-8'
+
+                    state_prep = prepare_loaded_state(key, state, charset,
+                                                      fix_headers=fix_headers)
+                    #if key == 'request':
+                    #    print('----- load begins -------------------------')
+                    #    print('STATE', state_prep)
+                    #    print('CHARSET', charset)
+                    #    traceback.print_stack()
+                    #    print('----- load ends -------------------------')
                     obj = getattr(self, key)
                     with obj.disable_callbacks():
                         obj.clear()
-                        obj.update(state)
+                        obj.update(state_prep)
 
     def reset(self):
         self.request.clear()
@@ -360,11 +410,11 @@ class TestServer(object):
             'cookies': None,
             'path': None,
             'method': None,
-            'charset': 'UTF-8',
             'data': None,
             'files': {},
             'client_ip': None,
             'done': False,
+            'charset': 'utf-8',
         })
         #print('.reset(): just reset the request!')
         #print('.reset(): content of request: %s' % self.request.get_dict())
@@ -378,6 +428,7 @@ class TestServer(object):
             'cookies': [],
             'callback': None,
             'sleep': None,
+            'charset': 'utf-8',
         })
         self.response_once.clear()
 

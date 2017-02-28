@@ -1,3 +1,4 @@
+# coding: utf-8
 # pylint: disable=redefined-outer-name
 import time
 from threading import Thread
@@ -37,6 +38,14 @@ def test_get(server):
     server.response['data'] = valid_data
     data = urlopen(server.get_url()).read()
     assert data == valid_data
+
+
+def test_non_utf_request_data(server):
+    server.request['charset'] = 'cp1251'
+    server.response['data'] = 'abc'
+    req = Request(url=server.get_url(), data=u'конь'.encode('cp1251'))
+    assert urlopen(req).read() == b'abc'
+    assert server.request['data'] == u'конь'.encode('cp1251')
 
 
 def test_request_client_ip(server):
@@ -180,7 +189,20 @@ def test_response_once_cookies(server):
 
 def test_default_header_content_type(server):
     info = urlopen(server.get_url())
-    assert info.headers['content-type'] == 'text/html; charset=UTF-8'
+    assert info.headers['content-type'] == 'text/html; charset=utf-8'
+
+# FIXME: FIX IT
+# FAILS WITH
+# >       assert server.request['args']['who'] == u'конь'
+# E       assert 'ГЄГ®Г­Гј' == 'конь'
+# E         - ГЄГ®Г­Гј
+# E         + конь
+#def test_non_utf_request_charset(server):
+#    server.request['charset'] = 'cp1251'
+#    server.response['data'] = 'abc'
+#    req = Request(url=server.get_url() + u'?who=конь'.encode('cp1251'))
+#    assert urlopen(req).read() == b'abc'
+#    assert server.request['args']['who'] == u'конь'
 
 
 def test_custom_header_content_type(server):

@@ -39,6 +39,7 @@ object has dict-like interface and provides these details:
     :files: files sent with the request
     :client_ip: IP address the request has been sent from
     :done: the flag means if the request has been sent already
+    :charset: the character set which data of request are encoded with
 
 See detailed description of request properties at :ref:`api_request`
 
