@@ -9,6 +9,7 @@ import json
 from subprocess import Popen
 import signal
 import atexit
+from socket import AF_INET
 
 from six.moves.urllib.parse import urljoin
 import six
@@ -21,8 +22,10 @@ import tornado.gen
 from tornado.httpserver import HTTPServer
 from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
+from tornado.netutil import bind_sockets
 
-from test_server.error import TestServerRuntimeError
+from test_server.error import TestServerError
+from test_server.container import CallbackDict
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
@@ -64,7 +67,7 @@ def bytes_to_unicode(obj):
         return obj
 
 
-def prepare_loaded_state(state_key, state):
+def prepare_loaded_state(state_key, state, fix_headers=True):
     """
     Fix state loaded from JSON-serialized data:
     * all values of data keys have to be converted to <bytes> strings
@@ -78,11 +81,12 @@ def prepare_loaded_state(state_key, state):
             if state[key] is not None:
                 state[key] = state[key].encode('utf-8')
     if state_key == 'request':
-        hdr = HTTPHeaders()
-        if state['headers']:
-            for key, val in state['headers']:
-                hdr.add(key, val)
-        state['headers'] = hdr
+        if fix_headers:
+            hdr = HTTPHeaders()
+            if state['headers']:
+                for key, val in state['headers']:
+                    hdr.add(key, val)
+            state['headers'] = hdr
     return state
 
 
@@ -111,12 +115,13 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         elif key in self._server.response:
             return self._server.response[key]
         else:
-            raise TestServerRuntimeError('Parameter %s does not exists in '
-                                         'server response data' % key)
+            raise TestServerError('Parameter %s does not exists in '
+                                  'server response data' % key)
 
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
-        return value.decode(self._server.request['charset'])
+        # FIXME: why request was used here?
+        return value.decode('utf-8')#self._server.request['charset'])
 
     @tornado.web.asynchronous
     @tornado.gen.engine
@@ -124,7 +129,6 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         from test_server import __version__
 
         with (yield self._server._locks['request_handler'].acquire()):
-            self._server.load_response_state()
             # Remove some standard tornado headers
             for key in ('Content-Type', 'Server'):
                 if key in self._headers:
@@ -148,8 +152,14 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                 self._server.request['headers'] = self.request.headers
             self._server.request['path'] = self.request.path
             self._server.request['method'] = self.request.method
-            self._server.request['cookies'] = self.request.cookies
-            charset = self._server.request['charset']
+
+            cookies = {}
+            for key, cookie in self.request.cookies.items():
+                cookies[key] = dict(cookie)
+                cookies[key]['name'] = cookie.key
+                cookies[key]['value'] = cookie.value
+            self._server.request['cookies'] = cookies
+
             self._server.request['data'] = self.request.body
             self._server.request['files'] = self.request.files
 
@@ -187,7 +197,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                     response['headers'].append((key, value))
 
                 response['headers'].append(
-                    ('Listen-Port', str(self.application.listen_port)))
+                    ('Listen-Port', str(self._server.port)))
 
                 data = self.get_param('data', method)
                 if isinstance(data, six.string_types):
@@ -201,15 +211,18 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                         response['code'] = 405
                         response['data'] = b''
                 else:
-                    raise TestServerRuntimeError('Data parameter should '
-                                                 'be string or iterable '
-                                                 'object')
+                    raise TestServerError('Data parameter should '
+                                          'be string or iterable '
+                                          'object')
 
+                # FIXME: why request was used here?
+                # FIXME: why request.charset was used to
+                # generate response headers?
+                charset = 'UTF-8'#self._server.request['charset']
                 header_keys = [x[0].lower() for x in response['headers']]
                 if 'content-type' not in header_keys:
                     response['headers'].append(
-                        ('Content-Type',
-                         'text/html; charset=%s' % charset))
+                        ('Content-Type', 'text/html; charset=%s' % charset))
                 if 'server' not in header_keys:
                     response['headers'].append(
                         ('Server', 'TestServer/%s' % __version__))
@@ -219,43 +232,38 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                     self.add_header(key, val)
                 self.write(response['data'])
 
-                self._server.request['done'] = True
-                self._server.save_request_state()
-
             self._server.request['done'] = True
-            self._server.save_request_state()
 
             if not callback:
                 self.finish()
 
     get = post = put = patch = delete = options = request_handler
 
-    def finish(self, *args, **kwargs):
-        # I am not sure about this.
-        # I hope that solves strange error in tests
-        # when request['done'] is not True after successful
-        # request to the test server
-        # I thinks it is about race-codition
-        self._server.request['done'] = True
-        super(TestServerRequestHandler, self).finish(*args, **kwargs)
+
+# pylint: disable=abstract-method
+class StateCallbackDict(CallbackDict):
+    def __init__(self, server, state):
+        self.server = server
+        self.state = state
+        super(StateCallbackDict, self).__init__()
+
+    def write_callback(self):
+        self.server.save_state([self.state])
+
+    def read_callback(self):
+        self.server.load_state([self.state])
+# pylint: enable=abstract-method
 
 
 class TestServer(object):
-    request = {}
-    response = {}
-    response_once = {}
-
-    def __init__(self, port=9876, address='127.0.0.1', extra_ports=None,
+    def __init__(self, port=0, address='127.0.0.1',
                  engine='thread', role='master', **kwargs):
         assert engine in ('thread', 'subprocess')
+        self.request = StateCallbackDict(self, 'request')
+        self.response = StateCallbackDict(self, 'response')
+        self.response_once = StateCallbackDict(self, 'response_once')
         self.port = port
         self.address = address
-        self.extra_ports = list(extra_ports or [])
-        if engine == 'subprocess' and extra_ports:
-            raise TestServerRuntimeError(
-                'Option `extra_ports` is not supported'
-                ' for subprocess engine'
-            )
         self._handler = None
         self._thread = None # thread instance if thread engine
         self._proc = None # Process instance if subprocess engine
@@ -264,6 +272,7 @@ class TestServer(object):
         self.request_file = None
         self.response_file = None
         self.response_once_file = None
+        self.config_file = None
         self.request_lock_file = None
         self.response_lock_file = None
         self.response_once_lock_file = None
@@ -279,18 +288,23 @@ class TestServer(object):
             os.close(hdl)
             hdl, self.response_once_file = tempfile.mkstemp()
             os.close(hdl)
-            print('Request file: %s' % self.request_file)
-            print('Response file: %s' % self.response_file)
-            print('Response_once file: %s'
-                  % self.response_once_file)
+            hdl, self.config_file = tempfile.mkstemp()
+            os.close(hdl)
+            #print('Request file: %s' % self.request_file)
+            #print('Response file: %s' % self.response_file)
+            #print('Response_once file: %s'
+            #      % self.response_once_file)
+            #print('config file: %s' % self.config_file)
         if role == 'server' and engine == 'subprocess':
             self.request_file = kwargs['request_file']
             self.response_file = kwargs['response_file']
             self.response_once_file = kwargs['response_once_file']
+            self.config_file = kwargs['config_file']
         if engine == 'subprocess':
             self.request_lock_file = self.request_file + '.lock'
             self.response_lock_file = self.response_file + '.lock'
             self.response_once_lock_file = self.response_once_file + '.lock'
+            self.config_lock_file = self.config_file + '.lock'
         self._locks = {
             'request_handler': Semaphore(),
             'request_file': (FileLock(self.request_lock_file)
@@ -299,7 +313,13 @@ class TestServer(object):
                               if self.response_file else None),
             'response_once_file': (FileLock(self.response_once_lock_file)
                                    if self.response_once_file else None),
+            'config_file': (FileLock(self.config_lock_file)
+                            if self.config_file else None),
         }
+        self.config = StateCallbackDict(self, 'config')
+        self.config.update({
+            'port': self.port,
+        })
         self.reset()
 
     def save_state(self, keys=None):
@@ -309,7 +329,9 @@ class TestServer(object):
             for key in keys:
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
-                    state = bytes_to_unicode(getattr(self, key))
+                    obj = getattr(self, key)
+                    with obj.disable_callbacks():
+                        state = bytes_to_unicode(obj.get_dict())
                     with open(getattr(self, attr), 'w') as out:
                         json.dump(state, out)
 
@@ -320,48 +342,15 @@ class TestServer(object):
             for key in keys:
                 attr = '%s_file' % key
                 with self._locks[attr].acquire(timeout=-1):
-                    try:
-                        with open(getattr(self, attr)) as inp:
-                            content = inp.read()
-                        state = prepare_loaded_state(key, json.loads(content))
-                        setattr(self, key, state)
-                    except Exception as ex:
-                        logging.error('', exc_info=ex)
-                        raise Exception('%s, %s, file_content: [%s]' % (
-                            str(ex), attr, content))
-
-    def save_response_state(self):
-        self.save_state(['response', 'response_once'])
-
-    def load_response_state(self):
-        self.load_state(['response', 'response_once'])
-
-    def save_request_state(self):
-        self.save_state(['request'])
-
-    def load_request_state(self):
-        self.load_state(['request'])
-
-    def set_response(self, key, val):
-        """
-        Change response and save it state to file
-        """
-        self.response[key] = val
-        self.save_response_state()
-
-    def set_response_once(self, key, val):
-        """
-        Change response_once and save it state to file
-        """
-        self.response_once[key] = val
-        self.save_response_state()
-
-    def get_request(self, key):
-        """
-        Load request state and return value of specified key
-        """
-        self.load_request_state()
-        return self.request[key]
+                    with open(getattr(self, attr)) as inp:
+                        content = inp.read()
+                    fix_headers = (self._role == 'master')
+                    state = prepare_loaded_state(key, json.loads(content),
+                                                 fix_headers=fix_headers)
+                    obj = getattr(self, key)
+                    with obj.disable_callbacks():
+                        obj.clear()
+                        obj.update(state)
 
     def reset(self):
         self.request.clear()
@@ -377,6 +366,10 @@ class TestServer(object):
             'client_ip': None,
             'done': False,
         })
+        #print('.reset(): just reset the request!')
+        #print('.reset(): content of request: %s' % self.request.get_dict())
+        #print('.reset(): content of request file: %s'
+        #      % open(self.request_file).read())
         self.response.clear()
         self.response.update({
             'code': 200,
@@ -387,8 +380,6 @@ class TestServer(object):
             'sleep': None,
         })
         self.response_once.clear()
-        self.save_request_state()
-        self.save_response_state()
 
     def _build_web_app(self):
         """Build tornado web application that is served by
@@ -398,51 +389,54 @@ class TestServer(object):
         ])
 
     def main_loop_function(self, keep_alive=False):
-        """This is function that is executed in separate thread:
-         * start HTTP server
-         * start tornado loop"""
+        """
+        Ask HTTP server start processing requests.
+
+        This is function that is executed in separate thread:
+        * start HTTP server
+        * start tornado loop
+        """
         self.ioloop.make_current()
-        ports = [self.port] + self.extra_ports
-        servers = []
-        for port in ports:
-            app = self._build_web_app()
-            app.listen_port = port
-            server = HTTPServer(app, no_keep_alive=not keep_alive)
+        socket = None
+        if self.port == 0:
+            socket = bind_sockets(0, self.address,
+                                  family=AF_INET)[0]
+            self.port = int(socket.getsockname()[1])
+            self.config['port'] = self.port
 
-            try_limit = 10
-            try_pause = 1 / float(try_limit)
-            for count in range(try_limit):
-                try:
-                    server.listen(port, self.address)
-                except OSError:
-                    if count == (try_limit - 1):
-                        raise
-                    else:
-                        logging.debug('Socket %s:%d is busy, '
-                                      'waiting %.2f seconds.',
-                                      self.address, self.port, try_pause)
-                        time.sleep(0.1)
+        app = self._build_web_app()
+        server = HTTPServer(app, no_keep_alive=not keep_alive)
+
+        try_limit = 10
+        try_pause = 1 / float(try_limit)
+        for count in range(try_limit):
+            try:
+                if socket:
+                    server.add_sockets([socket])
                 else:
-                    break
+                    server.listen(self.port, self.address)
+            except OSError:
+                if count == (try_limit - 1):
+                    raise
+                else:
+                    logging.debug('Socket %s:%d is busy, '
+                                  'waiting %.2f seconds.',
+                                  self.address, self.port, try_pause)
+                    time.sleep(0.1)
+            else:
+                break
 
-            logger.debug('Listening on port %d', port)
-            servers.append(server)
+            logger.debug('Listening on port %d', self.port)
 
         try:
             self.ioloop.start()
         finally:
             # manually close sockets to be able to create
             # other HTTP servers on same sockets
-            for server in servers:
-                # pylint: disable=protected-access
-                server.stop()
+            server.stop()
 
     def start(self, keep_alive=False, daemon=True):
-        """Create new thread with tornado loop and start there
-        HTTP server."""
-
-        #self.is_stopped = False
-
+        """Start the HTTP server."""
         if self._engine == 'thread' or self._role == 'server':
             self._thread = Thread(target=self.main_loop_function,
                                   args=[keep_alive])
@@ -455,6 +449,7 @@ class TestServer(object):
                 '--req', self.request_file,
                 '--resp', self.response_file,
                 '--resp-once', self.response_once_file,
+                '--config', self.config_file,
             ])
 
             def kill_child():
@@ -469,11 +464,33 @@ class TestServer(object):
             raise Exception('Should not be raised ever')
 
         if self._role == 'master':
+            if self._engine == 'subprocess':
+                config_loaded = False
+                try_limit = 50
+                try_pause = 1 / float(try_limit)
+                for count in range(try_limit):
+                    try:
+                        self.config['port']
+                    except ValueError:
+                        time.sleep(try_pause)
+                    else:
+                        if self.config['port'] != 0:
+                            config_loaded = True
+                            break
+                        else:
+                            time.sleep(try_pause)
+                if not config_loaded:
+                    raise TestServerError(
+                        'Could not load from master process the config file'
+                        ' saved by server process'
+                    )
+                self.port = self.config['port']
+
             try_limit = 10
             try_pause = 1 / float(try_limit)
             for count in range(try_limit):
                 try:
-                    urlopen(self.get_url()).read()
+                    urlopen(self.get_url() + '?method=start').read()
                 except Exception: # pylint: disable=broad-except
                     if count == (try_limit - 1):
                         raise
@@ -485,7 +502,7 @@ class TestServer(object):
             self.reset()
 
     def stop(self):
-        "Stop tornado loop and wait for thread finished it work"
+        """Stop tornado loop and wait for thread finished it work."""
         if ((self._role == 'master' and self._engine == 'thread')
                 or self._role == 'server'):
             self.ioloop.stop()
@@ -493,16 +510,17 @@ class TestServer(object):
         if self._role == 'master' and self._engine == 'subprocess':
             kill_process(self._proc.pid)
             self.remove_temp_files()
-        #self.is_stopped = True
 
     def remove_temp_files(self):
         files = (
             self.request_file,
             self.response_file,
             self.response_once_file,
+            self.config_file,
             self.request_lock_file,
             self.response_lock_file,
             self.response_once_lock_file,
+            self.config_lock_file,
         )
         for file_ in files:
             try:
@@ -510,17 +528,21 @@ class TestServer(object):
             except OSError:
                 pass
 
-    def get_url(self, extra='', port=None):
-        "Build URL that is served by HTTP server"
+    def get_url(self, path='', port=None):
+        """Build URL that is served by HTTP server."""
         if port is None:
             port = self.port
-        return urljoin('http://%s:%d/' % (self.address, port), extra)
+        return urljoin('http://%s:%d/' % (self.address, port), path)
 
     def wait_request(self, timeout):
-        """Stupid implementation that eats CPU"""
+        """Stupid implementation that eats CPU."""
         start = time.time()
         while True:
-            if self.get_request('done'):
+            #req = self.request.get_dict()
+            if self.request['done']:
+            #if req['done']:
+                #print('wait_request [timeout=%s]: req is done: %s'
+                #      % (timeout, req))
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:
@@ -538,6 +560,7 @@ def script_test_server():
         parser.add_argument('--req')
         parser.add_argument('--resp')
         parser.add_argument('--resp-once')
+        parser.add_argument('--config')
         opts = parser.parse_args()
         if opts.req is None:
             sys.stderr.write('Option --req is not specified\n')
@@ -548,6 +571,9 @@ def script_test_server():
         if opts.resp_once is None:
             sys.stderr.write('Option --resp-once is not specified\n')
             sys.exit(1)
+        if opts.config is None:
+            sys.stderr.write('Option --config is not specified\n')
+            sys.exit(1)
         host, port = opts.address.split(':')
         port = int(port)
         server = TestServer(address=host,
@@ -555,6 +581,7 @@ def script_test_server():
                             request_file=opts.req,
                             response_file=opts.resp,
                             response_once_file=opts.resp_once,
+                            config_file=opts.config,
                             engine='subprocess',
                             role='server')
         server.start()

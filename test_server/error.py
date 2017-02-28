@@ -1,9 +1,5 @@
-__all__ = ('TestServerError', 'TestServerRuntimeError')
+__all__ = ('TestServerError',)
 
 
 class TestServerError(Exception):
-    pass
-
-
-class TestServerRuntimeError(TestServerError):
     pass
