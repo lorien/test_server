@@ -10,7 +10,7 @@ class CallbackDict(object):
     When data is writing the `.write_callback()` is called.
     """
 
-    def __init__(self, data=None, *args, **kwargs):
+    def __init__(self, data=None):
         if data is None:
             self._reg = {}
         else:
@@ -48,7 +48,7 @@ class CallbackDict(object):
         if self.callbacks_enabled:
             self.write_callback()
 
-    def _not_implemented_mock(*args, **kwargs):
+    def _not_implemented_mock(self, *args, **kwargs):
         raise NotImplementedError
 
     get = set = keys = items = _not_implemented_mock
@@ -67,4 +67,4 @@ class CallbackDict(object):
     def __contains__(self, key):
         if self.callbacks_enabled:
             self.read_callback()
-        return key in self._reg 
+        return key in self._reg

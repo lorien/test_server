@@ -10,7 +10,6 @@ from subprocess import Popen
 import signal
 import atexit
 from socket import AF_INET
-import traceback
 
 from six.moves.urllib.parse import urljoin
 import six
@@ -26,7 +25,6 @@ from tornado.ioloop import IOLoop
 from tornado.netutil import bind_sockets
 
 from test_server.error import TestServerError
-from test_server.util import DeprecatedAttribute
 from test_server.container import CallbackDict
 
 __all__ = ('TestServer', 'WaitTimeoutError')
@@ -131,10 +129,6 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
         from test_server import __version__
 
         with (yield self._server._locks['request_handler'].acquire()):
-            # load initial request state
-            update_req = {}
-
-            #self._server.load_state(['response_once'])
             # Remove some standard tornado headers
             for key in ('Content-Type', 'Server'):
                 if key in self._headers:
@@ -224,7 +218,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                 # FIXME: why request was used here?
                 # FIXME: why request.charset was used to
                 # generate response headers?
-                charset = 'utf-8'#self._server.request['charset']
+                charset = 'UTF-8'#self._server.request['charset']
                 header_keys = [x[0].lower() for x in response['headers']]
                 if 'content-type' not in header_keys:
                     response['headers'].append(
@@ -245,16 +239,8 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
 
     get = post = put = patch = delete = options = request_handler
 
-    def finish(self, *args, **kwargs):
-        # I am not sure about this.
-        # I hope that solves strange error in tests
-        # when request['done'] is not True after successful
-        # request to the test server
-        # I thinks it is about race-codition
-        self._server.request['done'] = True
-        super(TestServerRequestHandler, self).finish(*args, **kwargs)
 
-
+# pylint: disable=abstract-method
 class StateCallbackDict(CallbackDict):
     def __init__(self, server, state):
         self.server = server
@@ -266,6 +252,7 @@ class StateCallbackDict(CallbackDict):
 
     def read_callback(self):
         self.server.load_state([self.state])
+# pylint: enable=abstract-method
 
 
 class TestServer(object):
