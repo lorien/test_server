@@ -5,7 +5,7 @@ from threading import Thread
 import os
 
 from six.moves.urllib.request import urlopen, Request
-from six.moves.urllib.error import HTTPError
+from six.moves.urllib.error import HTTPError, URLError
 import pytest
 
 from test_server import TestServer, WaitTimeoutError
@@ -272,3 +272,21 @@ def test_temp_files_are_removed():
     ]
     server2.stop()
     assert all(not os.path.exists(x) for x in files)
+
+
+@pytest.mark.skip_engine('subprocess')
+def test_data_generator(server):
+
+    def data():
+        yield b'foo'
+        yield b'bar'
+
+    server.response['data'] = data()
+    data1 = urlopen(server.get_url()).read()
+    assert data1 == b'foo'
+    data2 = urlopen(server.get_url()).read()
+    assert data2 == b'bar'
+    with pytest.raises(URLError) as ex:
+        urlopen(server.get_url())
+    assert ex.value.code == 405
+    assert ex.value.read() == b'data generator has no more data'

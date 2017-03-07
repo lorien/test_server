@@ -216,7 +216,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
                         response['data'] = next(data)
                     except StopIteration:
                         response['code'] = 405
-                        response['data'] = b''
+                        response['data'] = b'data generator has no more data'
                 else:
                     raise TestServerError('Data parameter should '
                                           'be string or iterable '
