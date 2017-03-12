@@ -1,10 +1,12 @@
+# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
+# *
+# Licensed under the MIT License
 from contextlib import contextmanager
 from copy import deepcopy
 
 
 class CallbackDict(object):
-    """
-    Dict-like class calling callbacks on data read/write.
+    """Dict-like class calling callbacks on data read/write.
 
     When data is reading the `.read_callback()` is called.
     When data is writing the `.write_callback()` is called.

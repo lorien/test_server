@@ -1,34 +1,38 @@
+# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
+# *
+# Licensed under the MIT License
+import atexit
+import collections
+import json
+import logging
+import os
+import signal
+from socket import AF_INET
+from subprocess import Popen
+import tempfile
 from threading import Thread
 import time
-import collections
-import logging
 import types
-import os
-import tempfile
-import json
-from subprocess import Popen
-import signal
-import atexit
-from socket import AF_INET
 
-from six.moves.urllib.parse import urljoin
-import six
-from six.moves.urllib.request import urlopen
 from filelock import FileLock
 import psutil
-import tornado.web
-from tornado.locks import Semaphore
+import six
+from six.moves.urllib.parse import urljoin
+from six.moves.urllib.request import urlopen
 import tornado.gen
 from tornado.httpserver import HTTPServer
 from tornado.httputil import HTTPHeaders
 from tornado.ioloop import IOLoop
+from tornado.locks import Semaphore
 from tornado.netutil import bind_sockets
+import tornado.web
 
-from test_server.error import TestServerError
 from test_server.container import CallbackDict
+from test_server.error import TestServerError
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
+
 
 class WaitTimeoutError(Exception):
     pass
@@ -68,8 +72,8 @@ def bytes_to_unicode(obj, charset):
 
 
 def prepare_loaded_state(state_key, state, charset, fix_headers=True):
-    """
-    Fix state loaded from JSON-serialized data:
+    """Fix state loaded from JSON-serialized data
+
     * all values of data keys have to be converted to <bytes> strings
     * headers should be converted to tornado.httputil.HTTPHeaders
     """
@@ -433,15 +437,13 @@ class TestServer(object):
         self.response_once.clear()
 
     def _build_web_app(self):
-        """Build tornado web application that is served by
-        HTTP server"""
+        """Build tornado web application that is served by HTTP server"""
         return tornado.web.Application([
             (r"^.*", TestServerRequestHandler, {'test_server': self}),
         ])
 
     def main_loop_function(self, keep_alive=False):
-        """
-        Ask HTTP server start processing requests.
+        """Ask HTTP server start processing requests
 
         This is function that is executed in separate thread:
         * start HTTP server
@@ -588,7 +590,6 @@ class TestServer(object):
         while True:
             #req = self.request.get_dict()
             if self.request['done']:
-            #if req['done']:
                 #print('wait_request [timeout=%s]: req is done: %s'
                 #      % (timeout, req))
                 break
