@@ -1,10 +1,11 @@
+# coding: utf-8
 # pylint: disable=redefined-outer-name
 import time
 from threading import Thread
 import os
 
 from six.moves.urllib.request import urlopen, Request
-from six.moves.urllib.error import HTTPError
+from six.moves.urllib.error import HTTPError, URLError
 import pytest
 
 from test_server import TestServer, WaitTimeoutError
@@ -37,6 +38,14 @@ def test_get(server):
     server.response['data'] = valid_data
     data = urlopen(server.get_url()).read()
     assert data == valid_data
+
+
+def test_non_utf_request_data(server):
+    server.request['charset'] = 'cp1251'
+    server.response['data'] = 'abc'
+    req = Request(url=server.get_url(), data=u'конь'.encode('cp1251'))
+    assert urlopen(req).read() == b'abc'
+    assert server.request['data'] == u'конь'.encode('cp1251')
 
 
 def test_request_client_ip(server):
@@ -180,7 +189,20 @@ def test_response_once_cookies(server):
 
 def test_default_header_content_type(server):
     info = urlopen(server.get_url())
-    assert info.headers['content-type'] == 'text/html; charset=UTF-8'
+    assert info.headers['content-type'] == 'text/html; charset=utf-8'
+
+# FIXME: FIX IT
+# FAILS WITH
+# >       assert server.request['args']['who'] == u'конь'
+# E       assert 'ГЄГ®Г­Гј' == 'конь'
+# E         - ГЄГ®Г­Гј
+# E         + конь
+#def test_non_utf_request_charset(server):
+#    server.request['charset'] = 'cp1251'
+#    server.response['data'] = 'abc'
+#    req = Request(url=server.get_url() + u'?who=конь'.encode('cp1251'))
+#    assert urlopen(req).read() == b'abc'
+#    assert server.request['args']['who'] == u'конь'
 
 
 def test_custom_header_content_type(server):
@@ -250,3 +272,29 @@ def test_temp_files_are_removed():
     ]
     server2.stop()
     assert all(not os.path.exists(x) for x in files)
+
+
+@pytest.mark.skip_engine('subprocess')
+def test_data_generator(server):
+
+    def data():
+        yield b'foo'
+        yield b'bar'
+
+    server.response['data'] = data()
+    data1 = urlopen(server.get_url()).read()
+    assert data1 == b'foo'
+    data2 = urlopen(server.get_url()).read()
+    assert data2 == b'bar'
+    with pytest.raises(URLError) as ex:
+        urlopen(server.get_url())
+    assert ex.value.code == 405
+    assert ex.value.read() == b'data generator has no more data'
+
+
+def test_specific_port():
+    server = TestServer(address='localhost', port=9876)
+    server.start()
+    server.response['data'] = b'abc'
+    data = urlopen(server.get_url()).read()
+    assert data == b'abc'

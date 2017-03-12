@@ -69,4 +69,17 @@ request :: done
 
     The flag means if the request has been performed
 
+request :: charset
+^^^^^^^^^^^^^^^^^^^
 
+    :type: :class:`str`
+
+
+    The character set which data of request are encoded with. This is the only
+    request parameter which is set by YOU and not by the server. If you expect
+    the data from the client would be in non UTF-8 encoding then specify correct
+    encoding with:
+
+    ..  code:: python
+
+        server.request['charset'] = '<encoding>'
