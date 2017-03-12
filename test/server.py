@@ -290,3 +290,11 @@ def test_data_generator(server):
         urlopen(server.get_url())
     assert ex.value.code == 405
     assert ex.value.read() == b'data generator has no more data'
+
+
+def test_specific_port():
+    server = TestServer(address='localhost', port=9876)
+    server.start()
+    server.response['data'] = b'abc'
+    data = urlopen(server.get_url()).read()
+    assert data == b'abc'

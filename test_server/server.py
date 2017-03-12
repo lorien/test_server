@@ -448,12 +448,12 @@ class TestServer(object):
         * start tornado loop
         """
         self.ioloop.make_current()
-        socket = None
         if self.port == 0:
-            socket = bind_sockets(0, self.address,
-                                  family=AF_INET)[0]
+            socket = bind_sockets(0, self.address, family=AF_INET)[0]
             self.port = int(socket.getsockname()[1])
             self.config['port'] = self.port
+        else:
+            socket = bind_sockets(self.port, self.address, family=AF_INET)[0]
 
         app = self._build_web_app()
         server = HTTPServer(app, no_keep_alive=not keep_alive)
@@ -462,10 +462,7 @@ class TestServer(object):
         try_pause = 1 / float(try_limit)
         for count in range(try_limit):
             try:
-                if socket:
-                    server.add_sockets([socket])
-                else:
-                    server.listen(self.port, self.address)
+                server.add_sockets([socket])
             except OSError:
                 if count == (try_limit - 1):
                     raise
