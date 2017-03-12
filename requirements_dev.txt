@@ -2,7 +2,6 @@ coverage
 coveralls
 flake8
 bumpversion
-six
 pytest
 pytest-cov
 pylint
