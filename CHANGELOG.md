@@ -1,8 +1,14 @@
 # Change Log of test-server Library
 
-## [0.0.27] - Unreleased
+## [0.0.28] - Unreleased
+### Changed
+
+## [0.0.27] - 2017-03-12
 ### Added
 * Add partial support for requests in non-UTF-8 encoding
+
+### Fixed
+* Fix bug: test server fails to start on non-zero port
 
 ### Changed
 * Change request/response access method: use direct access
