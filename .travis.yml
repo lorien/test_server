@@ -91,7 +91,6 @@ install:
       brew update
       brew upgrade pyenv
     fi
-  - python -m pip install -U pip setuptools tox
 
 before_script:
   # Install custom pyton version on OSX
@@ -102,6 +101,7 @@ before_script:
       pyenv install --skip-existing "$PYENV_VERSION"
       pyenv global "$PYENV_VERSION"
     fi
+  - python -m pip install -U pip setuptools tox
 
 script:
     - tox -e $TOX_ENV
