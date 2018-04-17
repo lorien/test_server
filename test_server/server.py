@@ -15,6 +15,7 @@ import time
 import types
 from six.moves.urllib.parse import urljoin
 from six.moves.urllib.request import urlopen
+import re
 
 from filelock import FileLock
 import psutil
@@ -32,6 +33,12 @@ from test_server.error import TestServerError
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
+# Allow null-bytes be in the headers generate by tornado server
+# Original code is: re.compile(r"[\x00-\x1f]")
+# pylint: disable=protected-access
+tornado.web.RequestHandler._INVALID_HEADER_CHAR_RE = re.compile(r"[\x01-\x1f]")
+
+
 
 
 class WaitTimeoutError(Exception):
