@@ -8,21 +8,29 @@ matrix:
       python: 3.4
       env: TOX_ENV=qa
 
-    ## OSX engine=thread
-    #- os: osx
-    #  language: generic
-    #  env: TOX_ENV=py27
-    #- os: osx
-    #  language: generic
-    #  env: TOX_ENV=py36
+    # OSX engine=thread
+    - os: osx
+      language: generic
+      env:
+      - TOX_ENV=py27
+      - PYENV_VERSION="2.7.13"
+    - os: osx
+      language: generic
+      env:
+      - TOX_ENV=py36
+      - PYENV_VERSION="3.6.0"
 
-    ## OSX engine=subprocess
-    #- os: osx
-    #  language: generic
-    #  env: TOX_ENV=py27-engine-subprocess
-    #- os: osx
-    #  language: generic
-    #  env: TOX_ENV=py36-engine-subprocess
+    # OSX engine=subprocess
+    - os: osx
+      language: generic
+      env:
+      - TOX_ENV=py27-engine-subprocess
+      - PYENV_VERSION="2.7.13"
+    - os: osx
+      language: generic
+      env:
+      - TOX_ENV=py36-engine-subprocess
+      - PYENV_VERSION="3.6.0"
 
     # Linux engine=thread
     - os: linux
@@ -78,7 +86,22 @@ install:
   #  else
   #    pip3 install -U pip setuptools tox
   #  fi
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      brew update
+      brew upgrade pyenv
+    fi
   - python -m pip install -U pip setuptools tox
+
+before_script:
+  # Install custom pyton version on OSX
+  - |
+    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+      if [[ ! -z "$VIRTUAL_ENV" ]]; then deactivate; fi
+      eval "$(pyenv init -)"
+      pyenv install --skip-existing "$PYENV_VERSION"
+      pyenv global "$PYENV_VERSION"
+    fi
 
 script:
     - tox -e $TOX_ENV
