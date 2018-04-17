@@ -5,4 +5,8 @@
 # W503 - line break occured before a binary operator
 # F811 - redefinition of unused name
 # F401 - name imported but unused
-ignore = E261,E265,W503,F811,F401
+# H301 - one import per line
+ignore = E261,E265,W503,F811,F401,H301
+copyright-check = True
+copyright-author = Gregory Petukhov \(lorien@lorien\.name\)
+copyright-min-file-size=5

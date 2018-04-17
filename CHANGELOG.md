@@ -1,7 +1,15 @@
 # Change Log of test-server Library
 
-## [0.0.28] - Unreleased
+## [0.0.30] - unreleased
 ### Changed
+
+## [0.0.29] - 2018-04-17
+### Changed
+* Allow to use null bytes in response headers
+
+## [0.0.28] - 2018-04-08
+### Changed
+* Restrict tornado dependency version: <5.0.0
 
 ## [0.0.27] - 2017-03-12
 ### Added

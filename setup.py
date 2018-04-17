@@ -1,3 +1,6 @@
+# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
+# *
+# Licensed under the MIT License
 import os
 
 from setuptools import setup
@@ -7,7 +10,7 @@ ROOT = os.path.dirname(os.path.realpath(__file__))
 setup(
     # Meta data
     name='test-server',
-    version='0.0.27',
+    version='0.0.29',
     author='Gregory Petukhov',
     author_email='lorien@lorien.name',
     maintainer="Gregory Petukhov",
@@ -20,7 +23,7 @@ setup(
     license='MIT License',
     # Package files
     packages=['test_server'],
-    install_requires=['tornado', 'six', 'psutil', 'filelock'],
+    install_requires=['tornado<5.0.0', 'six', 'psutil', 'filelock'],
     entry_points={
         'console_scripts': [
             'test_server = test_server.server:script_test_server',

@@ -1,11 +1,15 @@
 # coding: utf-8
+# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
+# *
+# Licensed under the MIT License
 # pylint: disable=redefined-outer-name
-import time
-from threading import Thread
 import os
-
-from six.moves.urllib.request import urlopen, Request
+from threading import Thread
+import time
 from six.moves.urllib.error import HTTPError, URLError
+from six.moves.urllib.request import urlopen, Request
+from six.moves.urllib.parse import unquote
+
 import pytest
 
 from test_server import TestServer, WaitTimeoutError
@@ -298,3 +302,14 @@ def test_specific_port():
     server.response['data'] = b'abc'
     data = urlopen(server.get_url()).read()
     assert data == b'abc'
+
+
+def test_null_bytes(server):
+    server.response_once['code'] = 302
+    server.response_once['headers'] = [
+        ('Location', server.get_url().rstrip('/') + '/\x00/')
+    ]
+    server.response['data'] = 'zzz'
+    res = urlopen(server.get_url())
+    assert res.read() == b'zzz'
+    assert unquote(server.request['path']) == '/\x00/'

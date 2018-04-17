@@ -1,12 +1,16 @@
+# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
+# *
+# Licensed under the MIT License
 """
 This module tests features available only
 in thread engine: generators, callbacks.
 These things could not be used in subprocess engine
 because it is not possible to save them in state-share files.
 """
-# pylint: disable=redefined-outer-name
-from six.moves.urllib.request import urlopen
 from six.moves.urllib.error import HTTPError
+from six.moves.urllib.request import urlopen
+
+# pylint: disable=redefined-outer-name
 import pytest
 
 from .server import (global_server, # pylint: disable=unused-import
