@@ -10,21 +10,21 @@ matrix:
       python: 3.4
       env: TOX_ENV=qa
 
-    # OSX engine=thread
-    - os: osx
-      language: generic
-      env: TOX_ENV=py27
-    - os: osx
-      language: generic
-      env: TOX_ENV=py36
+    ## OSX engine=thread
+    #- os: osx
+    #  language: generic
+    #  env: TOX_ENV=py27
+    #- os: osx
+    #  language: generic
+    #  env: TOX_ENV=py36
 
-    # OSX engine=subprocess
-    - os: osx
-      language: generic
-      env: TOX_ENV=py27-engine-subprocess
-    - os: osx
-      language: generic
-      env: TOX_ENV=py36-engine-subprocess
+    ## OSX engine=subprocess
+    #- os: osx
+    #  language: generic
+    #  env: TOX_ENV=py27-engine-subprocess
+    #- os: osx
+    #  language: generic
+    #  env: TOX_ENV=py36-engine-subprocess
 
     # Linux engine=thread
     - os: linux
@@ -63,23 +63,24 @@ matrix:
 install:
   # Deal with issue on Travis builders re: multiprocessing.Queue :(
   - "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
-  - |
-    if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
-      brew update
-      brew unlink python
-      brew unlink python3
-      if [[ TOX_ENV == py2* ]]; then
-        brew install python
-      else
-        brew install python3
-      fi
-    fi
-  - |
-    if [[ TOX_ENV == py2* ]]; then
-      pip install -U pip setuptools tox
-    else
-      pip3 install -U pip setuptools tox
-    fi
+  #- |
+  #  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
+  #    brew update
+  #    brew unlink python
+  #    brew unlink python3
+  #    if [[ TOX_ENV == py2* ]]; then
+  #      brew install python
+  #    else
+  #      brew install python3
+  #    fi
+  #  fi
+  #- |
+  #  if [[ TOX_ENV == py2* ]]; then
+  #    pip install -U pip setuptools tox
+  #  else
+  #    pip3 install -U pip setuptools tox
+  #  fi
+  - python -m pip install -U pip setuptools tox
 
 script:
     - tox -e $TOX_ENV
