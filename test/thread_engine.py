@@ -7,13 +7,14 @@ in thread engine: generators, callbacks.
 These things could not be used in subprocess engine
 because it is not possible to save them in state-share files.
 """
-# pylint: disable=redefined-outer-name
-import pytest
 from six.moves.urllib.error import HTTPError
 from six.moves.urllib.request import urlopen
 
-from test.server import (global_server, # pylint: disable=unused-import
-                         server, skip_by_engine)
+# pylint: disable=redefined-outer-name
+import pytest
+
+from .server import (global_server, # pylint: disable=unused-import
+                     server, skip_by_engine)
 
 
 @pytest.mark.skip_engine('subprocess')

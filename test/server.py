@@ -7,18 +7,19 @@ import os
 from threading import Thread
 import time
 import re
-
-import pytest
 from six.moves.urllib.error import HTTPError, URLError
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.parse import unquote
+
+import pytest
+from tornado.web import RequestHandler
 
 from test_server import TestServer, WaitTimeoutError
 import test_server
 
 # Allow null-bytes be in the headers generate by tornado server
-from tornado.web import RequestHandler
 # Original code is: re.compile(r"[\x00-\x1f]")
+# pylint: disable=protected-access
 RequestHandler._INVALID_HEADER_CHAR_RE = re.compile(r"[\x01-\x1f]")
 
 

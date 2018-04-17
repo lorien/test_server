@@ -13,12 +13,12 @@ import tempfile
 from threading import Thread
 import time
 import types
+from six.moves.urllib.parse import urljoin
+from six.moves.urllib.request import urlopen
 
 from filelock import FileLock
 import psutil
 import six
-from six.moves.urllib.parse import urljoin
-from six.moves.urllib.request import urlopen
 import tornado.gen
 from tornado.httpserver import HTTPServer
 from tornado.httputil import HTTPHeaders
@@ -122,6 +122,7 @@ class TestServerRequestHandler(tornado.web.RequestHandler):
             raise TestServerError('Parameter %s does not exists in '
                                   'server response data' % key)
 
+    # pylint: disable=arguments-differ
     def decode_argument(self, value, **kwargs):
         # pylint: disable=unused-argument
         return value.decode(self._server.request['charset'])
