@@ -1,7 +1,5 @@
 python: 2.7
 
-sudo: required
-
 matrix:
   include:
     # code quality
@@ -62,7 +60,7 @@ matrix:
 
 install:
   # Deal with issue on Travis builders re: multiprocessing.Queue :(
-  - "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
+  #- "sudo rm -rf /dev/shm && sudo ln -s /run/shm /dev/shm"
   #- |
   #  if [[ "$TRAVIS_OS_NAME" == "osx" ]]; then
   #    brew update
