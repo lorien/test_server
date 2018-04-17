@@ -6,13 +6,20 @@
 import os
 from threading import Thread
 import time
+import re
 
 import pytest
 from six.moves.urllib.error import HTTPError, URLError
 from six.moves.urllib.request import urlopen, Request
+from six.moves.urllib.parse import unquote
 
 from test_server import TestServer, WaitTimeoutError
 import test_server
+
+# Allow null-bytes be in the headers generate by tornado server
+from tornado.web import RequestHandler
+# Original code is: re.compile(r"[\x00-\x1f]")
+RequestHandler._INVALID_HEADER_CHAR_RE = re.compile(r"[\x01-\x1f]")
 
 
 @pytest.fixture(scope='session')
@@ -301,3 +308,14 @@ def test_specific_port():
     server.response['data'] = b'abc'
     data = urlopen(server.get_url()).read()
     assert data == b'abc'
+
+
+def test_null_bytes(server):
+    server.response_once['code'] = 302
+    server.response_once['headers'] = [
+        ('Location', server.get_url().rstrip('/') + '/\x00/')
+    ]
+    server.response['data'] = 'zzz'
+    res = urlopen(server.get_url())
+    assert res.read() == b'zzz'
+    assert unquote(server.request['path']) == '/\x00/'
