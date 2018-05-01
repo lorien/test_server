@@ -11,9 +11,9 @@ STATE = {
 def global_server():
     if not STATE['server']:
         print('[!] Starting server')
-        server = TestServer(port=9999)
-        server.start(daemon=True)
-        STATE['server'] = server
+        srv = TestServer(port=9999)
+        srv.start(daemon=True)
+        STATE['server'] = srv
     yield STATE['server']
     if STATE['server']:
         print('[!] Stoping server')
@@ -22,6 +22,6 @@ def global_server():
 
 
 @pytest.fixture(scope='function')
-def server(global_server):
+def server(global_server): # pylint: disable=redefined-outer-name
     global_server.reset()
     return global_server

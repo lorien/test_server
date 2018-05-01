@@ -1,48 +1,35 @@
 # Copyright 2015-2018 Gregory Petukhov (lorien@lorien.name)
 # *
 # Licensed under the MIT License
-import atexit
-import collections
-import json
 import logging
-import os
-import signal
-import socket
-from socket import AF_INET
-from subprocess import Popen
-import tempfile
 from threading import Thread, Event
 import time
 import types
 from six.moves.urllib.parse import urljoin
-from six.moves.urllib.request import urlopen
-import re
-from bottle import Bottle
-from collections import defaultdict
+from collections import defaultdict, Iterable
 
-from filelock import FileLock
-import psutil
 import six
 from webtest.http import StopableWSGIServer
+import bottle
 
-from test_server.container import CallbackDict
 from test_server.error import TestServerError
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
 
 
-import bottle
 
 def _hval_custom(value):
     value = bottle.tonat(value)
     if '\n' in value or '\r' in value:# or '\0' in value:
-        raise ValueError("Header value must not contain control characters: %r" % value)
+        raise ValueError(
+            'Header value must not contain control characters: %r' % value
+        )
     return value
 
 
-bottle._hval_origin = bottle._hval
-bottle._hval = _hval_custom
+bottle._hval_origin = bottle._hval # pylint: disable=protected-access
+bottle._hval = _hval_custom # pylint: disable=protected-access
 
 
 
@@ -65,9 +52,9 @@ def bytes_to_unicode(obj, charset):
         return obj
 
 
-class WebApplication(Bottle):
+class WebApplication(bottle.Bottle):
     # pylint: disable=abstract-method,protected-access
-    def __init__(self, test_server): 
+    def __init__(self, test_server):
         self._server = test_server
         super(WebApplication, self).__init__()
 
@@ -101,131 +88,136 @@ class WebApplication(Bottle):
         from test_server import __version__
         from bottle import request, LocalResponse
 
-        if True:
-            method = request.method.lower()
+        method = request.method.lower()
 
-            sleep = self.get_param('sleep', method)
-            if sleep:
-                time.sleep(sleep)
-            self._server.request['client_ip'] = request.environ.get('REMOTE_ADDR')
-            self._server.request['args'] = {}
-            self._server.request['args_binary'] = {}
-            for key in request.params.keys():
-                self._server.request['args'][key] = request.params.getunicode(key)
-                #self._server.request['args_binary'][key] = request.params[key]
-            self._server.request['headers'] = request.headers
+        sleep = self.get_param('sleep', method)
+        if sleep:
+            time.sleep(sleep)
+        self._server.request['client_ip'] = (
+            request.environ.get('REMOTE_ADDR')
+        )
+        self._server.request['args'] = {}
+        self._server.request['args_binary'] = {}
+        for key in request.params.keys(): # pylint: disable=no-member
+            self._server.request['args'][key] = (
+                request.params.getunicode(key) # pylint: disable=no-member
+            )
+            #self._server.request['args_binary'][key] = request.params[key]
+        self._server.request['headers'] = request.headers
 
-            path = request.fullpath
-            if isinstance(path, six.binary_type):
-                path = path.decode('utf-8')
-            self._server.request['path'] = path
-            self._server.request['method'] = method.upper()
+        path = request.fullpath
+        if isinstance(path, six.binary_type):
+            path = path.decode('utf-8')
+        self._server.request['path'] = path
+        self._server.request['method'] = method.upper()
 
-            cookies = {}
-            for key, value in request.cookies.items():
-                cookies[key] = {}
-                cookies[key]['name'] = key
-                cookies[key]['value'] = value
-            self._server.request['cookies'] = cookies
+        cookies = {}
+        for key, value in request.cookies.items(): # pylint: disable=no-member
+            cookies[key] = {}
+            cookies[key]['name'] = key
+            cookies[key]['value'] = value
+        self._server.request['cookies'] = cookies
 
-            self._server.request['data'] = request.body.read()
-            self._server.request['files'] = defaultdict(list)
-            for file_ in request.files.values():
-                self._server.request['files'][file_.name].append({
-                    'name': file_.name,
-                    'raw_filename': file_.raw_filename,
-                    'content_type': file_.content_type,
-                    'filename': file_.filename,
-                    'content': file_.file.read(),
-                })
+        self._server.request['data'] = (
+            request.body.read() # pylint: disable=no-member
+        )
+        self._server.request['files'] = defaultdict(list)
+        for file_ in request.files.values(): # pylint: disable=no-member
+            self._server.request['files'][file_.name].append({
+                'name': file_.name,
+                'raw_filename': file_.raw_filename,
+                'content_type': file_.content_type,
+                'filename': file_.filename,
+                'content': file_.file.read(),
+            })
 
-            callback = self.get_param('callback', method)
-            if callback:
-                res = callback()
-                if not isinstance(res, types.GeneratorType):
-                    res = [res]
-                for item in res:
-                    assert (
-                        isinstance(item, dict)
-                        and 'type' in item
-                        and item['type'] in ('response',)
+        callback = self.get_param('callback', method)
+        if callback:
+            res = callback()
+            if not isinstance(res, types.GeneratorType):
+                res = [res]
+            for item in res:
+                assert (
+                    isinstance(item, dict)
+                    and 'type' in item
+                    and item['type'] in ('response',)
+                )
+                bottle_res = LocalResponse()
+                if item['type'] == 'response':
+                    assert all(
+                        x in ('type', 'status', 'headers',
+                              'cookies', 'body')
+                        for x in item.keys()
                     )
-                    bottle_res = LocalResponse()
-                    if item['type'] == 'response':
-                        assert all(
-                            x in ('type', 'status', 'headers', 'cookies', 'body')
-                            for x in item.keys()
-                        )
-                        if 'status' in item:
-                            bottle_res.status = item['status']
-                        if 'headers' in item:
-                            for key, val in item['headers']:
-                                bottle_res.add_header(key, val)
-                        if 'cookies' in item:
-                            for key, val in item['cookies']:
-                                bottle_res.set_cookie(key, val)
-                        if 'body' in item:
-                            # use list `[foo]`, see comments below
-                            bottle_res.body = [item['body']]
-                self._server.request['done'] = True
-                return bottle_res
-        
-            else:
-                response = {
-                    'code': 200,
-                    'headers': [],
-                    'data': b'',
-                }
+                    if 'status' in item:
+                        bottle_res.status = item['status']
+                    if 'headers' in item:
+                        for key, val in item['headers']:
+                            bottle_res.add_header(key, val)
+                    if 'cookies' in item:
+                        for key, val in item['cookies']:
+                            bottle_res.set_cookie(key, val)
+                    if 'body' in item:
+                        # use list `[foo]`, see comments below
+                        bottle_res.body = [item['body']]
+            self._server.request['done'] = True
+            return bottle_res
+        else:
+            response = {
+                'code': 200,
+                'headers': [],
+                'data': b'',
+            }
 
-                response['code'] = self.get_param('code', method)
+            response['code'] = self.get_param('code', method)
 
-                for key, val in self.get_param('cookies', method):
-                    # Set-Cookie: name=newvalue; expires=date;
-                    # path=/; domain=.example.org.
-                    response['headers'].append(
-                        ('Set-Cookie', '%s=%s' % (key, val)))
-
-                for key, value in self.get_param('headers', method):
-                    response['headers'].append((key, value))
-
+            for key, val in self.get_param('cookies', method):
+                # Set-Cookie: name=newvalue; expires=date;
+                # path=/; domain=.example.org.
                 response['headers'].append(
-                    ('Listen-Port', str(self._server.port)))
+                    ('Set-Cookie', '%s=%s' % (key, val)))
 
-                data = self.get_param('data', method)
-                if isinstance(data, six.string_types):
-                    response['data'] = data
-                elif isinstance(data, six.binary_type):
-                    response['data'] = data
-                elif isinstance(data, collections.Iterable):
-                    try:
-                        response['data'] = next(data)
-                    except StopIteration:
-                        response['code'] = 503
-                else:
-                    raise TestServerError('Data parameter should '
-                                          'be string or iterable '
-                                          'object')
+            for key, value in self.get_param('headers', method):
+                response['headers'].append((key, value))
 
-                header_keys = [x[0].lower() for x in response['headers']]
-                if 'content-type' not in header_keys:
-                    response['headers'].append(
-                        ('Content-Type', 'text/html; charset=%s'
-                         % self._server.response['charset'])
-                    )
-                if 'server' not in header_keys:
-                    response['headers'].append(
-                        ('Server', 'TestServer/%s' % __version__))
+            response['headers'].append(
+                ('Listen-Port', str(self._server.port)))
 
-                bottle_response = LocalResponse()
-                bottle_response.status = response['code']
-                # Use list because if use just scalar object
-                # then on python3 there is an strange error
-                # unsupported response type int
-                bottle_response.body = [response['data']]
-                for key, val in response['headers']:
-                    bottle_response.add_header(key, val)
-                self._server.request['done'] = True
-                return bottle_response
+            data = self.get_param('data', method)
+            if isinstance(data, six.string_types):
+                response['data'] = data
+            elif isinstance(data, six.binary_type):
+                response['data'] = data
+            elif isinstance(data, Iterable):
+                try:
+                    response['data'] = next(data)
+                except StopIteration:
+                    response['code'] = 503
+            else:
+                raise TestServerError('Data parameter should '
+                                      'be string or iterable '
+                                      'object')
+
+            header_keys = [x[0].lower() for x in response['headers']]
+            if 'content-type' not in header_keys:
+                response['headers'].append(
+                    ('Content-Type', 'text/html; charset=%s'
+                     % self._server.response['charset'])
+                )
+            if 'server' not in header_keys:
+                response['headers'].append(
+                    ('Server', 'TestServer/%s' % __version__))
+
+            bottle_response = LocalResponse()
+            bottle_response.status = response['code']
+            # Use list because if use just scalar object
+            # then on python3 there is an strange error
+            # unsupported response type int
+            bottle_response.body = [response['data']]
+            for key, val in response['headers']:
+                bottle_response.add_header(key, val)
+            self._server.request['done'] = True
+            return bottle_response
 
 
 class TestServer(object):
@@ -237,6 +229,7 @@ class TestServer(object):
         self.address = address
         self._handler = None
         self._thread = None
+        self._server = None
         self._started = Event()
         self.config = {}
         self.config.update({
@@ -283,6 +276,7 @@ class TestServer(object):
         This function is supposed to be run in separate thread.
         """
 
+        # pylint: disable=line-too-long
         # params: https://github.com/Pylons/waitress/blob/master/waitress/adjustments.py#L79
         self._server = StopableWSGIServer(
             host=self.address,

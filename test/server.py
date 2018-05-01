@@ -3,19 +3,18 @@
 # *
 # Licensed under the MIT License
 # pylint: disable=redefined-outer-name
-import os
 from threading import Thread
 import time
 from six.moves.urllib.error import HTTPError, URLError
 from six.moves.urllib.request import urlopen, Request
-from six.moves.urllib.parse import unquote, quote
+from six.moves.urllib.parse import unquote
 
 import pytest
 
 from test_server import TestServer, WaitTimeoutError
 import test_server
 
-from test.util import global_server, server
+from .util import global_server, server # pylint: disable=unused-import
 
 
 def test_get(server):

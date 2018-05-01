@@ -2,9 +2,6 @@
 jobs=4
 extension-pkg-whitelist=pytest
 
-[TYPECHEK]
-ignored-modules=six.moves.urllib
-
 [MESSAGES CONTROL]
 disable=R,I,fixme,missing-docstring
 

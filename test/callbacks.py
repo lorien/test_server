@@ -1,15 +1,11 @@
 # Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
 # *
 # Licensed under the MIT License
-from six.moves.urllib.error import HTTPError
+# pylint: disable=redefined-outer-name
 from six.moves.urllib.request import urlopen
 
-# pylint: disable=redefined-outer-name
-import pytest
-
-from .util import (
-    global_server, # pylint: disable=unused-import
-    server
+from .util import (# pylint: disable=unused-import
+    global_server, server
 )
 
 

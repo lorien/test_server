@@ -23,7 +23,11 @@ setup(
     license='MIT License',
     # Package files
     packages=['test_server'],
-    install_requires=['webtest', 'bottle>=0.12.13', 'six', 'psutil', 'filelock'],
+    install_requires=[
+        'webtest',
+        'bottle>=0.12.13',
+        'six',
+    ],
     # Topics
     classifiers=[
         'Programming Language :: Python',

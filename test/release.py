@@ -1,12 +1,12 @@
 # Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
 # *
 # Licensed under the MIT License
-from __future__ import absolute_import
-import re
-
-from test_server import __version__
-
-
+#from __future__ import absolute_import
+#import re
+#
+#from test_server import __version__
+#
+#
 #def test_changelog():
 #    """Check release records in chenge log.
 #
