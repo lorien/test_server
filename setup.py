@@ -23,12 +23,7 @@ setup(
     license='MIT License',
     # Package files
     packages=['test_server'],
-    install_requires=['tornado<5.0.0', 'six', 'psutil', 'filelock'],
-    entry_points={
-        'console_scripts': [
-            'test_server = test_server.server:script_test_server',
-        ],
-    },
+    install_requires=['webtest', 'bottle>=0.12.13', 'six', 'psutil', 'filelock'],
     # Topics
     classifiers=[
         'Programming Language :: Python',
