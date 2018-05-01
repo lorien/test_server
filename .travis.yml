@@ -8,7 +8,6 @@ matrix:
       python: 3.4
       env: TOX_ENV=qa
 
-    # OSX engine=thread
     - os: osx
       language: generic
       env:
@@ -20,19 +19,6 @@ matrix:
       - TOX_ENV=py36
       - PYENV_VERSION="3.6.0"
 
-    # OSX engine=subprocess
-    - os: osx
-      language: generic
-      env:
-      - TOX_ENV=py27-engine-subprocess
-      - PYENV_VERSION="2.7.13"
-    - os: osx
-      language: generic
-      env:
-      - TOX_ENV=py36-engine-subprocess
-      - PYENV_VERSION="3.6.0"
-
-    # Linux engine=thread
     - os: linux
       language: python
       env: TOX_ENV=py27
@@ -47,22 +33,6 @@ matrix:
       language: python
       python: 3.6
       env: TOX_ENV=py36
-
-    # Linux engine=subprocess
-    - os: linux
-      language: python
-      env: TOX_ENV=py27-engine-subprocess
-    - os: linux
-      language: python
-      env: TOX_ENV=py34-engine-subprocess
-    - os: linux
-      language: python
-      python: 3.5
-      env: TOX_ENV=py35-engine-subprocess
-    - os: linux
-      language: python
-      python: 3.6
-      env: TOX_ENV=py36-engine-subprocess
   exclude:
     - python: 2.7 # hack to exclude default no-env travis job
 

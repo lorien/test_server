@@ -3,7 +3,6 @@
 # *
 # Licensed under the MIT License
 # pylint: disable=redefined-outer-name
-import os
 from threading import Thread
 import time
 from six.moves.urllib.error import HTTPError, URLError
@@ -15,26 +14,7 @@ import pytest
 from test_server import TestServer, WaitTimeoutError
 import test_server
 
-
-@pytest.fixture(scope='session')
-def global_server(opt_engine):
-    server = TestServer(engine=opt_engine)
-    server.start()
-    yield server
-    server.stop()
-
-
-@pytest.fixture(scope='function')
-def server(global_server):
-    global_server.reset()
-    return global_server
-
-
-@pytest.fixture(autouse=True)
-def skip_by_engine(request, opt_engine):
-    if request.node.get_marker('skip_engine'):
-        if request.node.get_marker('skip_engine').args[0] == opt_engine:
-            pytest.skip('Skipped on engine %s' % opt_engine)
+from .util import global_server, server # pylint: disable=unused-import
 
 
 def test_get(server):
@@ -132,9 +112,12 @@ def test_response_once_code(server):
 
 
 def test_request_done_after_start(server):
-    server = TestServer()
+    server = TestServer(port=10000)
     server.start()
-    assert server.request['done'] is False
+    try:
+        assert server.request['done'] is False
+    finally:
+        server.stop()
 
 
 def test_request_done(server):
@@ -195,18 +178,14 @@ def test_default_header_content_type(server):
     info = urlopen(server.get_url())
     assert info.headers['content-type'] == 'text/html; charset=utf-8'
 
-# FIXME: FIX IT
-# FAILS WITH
-# >       assert server.request['args']['who'] == u'конь'
-# E       assert 'ГЄГ®Г­Гј' == 'конь'
-# E         - ГЄГ®Г­Гј
-# E         + конь
 #def test_non_utf_request_charset(server):
-#    server.request['charset'] = 'cp1251'
+#    #server.request['charset'] = 'cp1251'
 #    server.response['data'] = 'abc'
-#    req = Request(url=server.get_url() + u'?who=конь'.encode('cp1251'))
+#    req = Request(
+#        url=server.get_url() + quote(u'?who=конь'.encode('cp1251'), safe='?=')
+#    )
 #    assert urlopen(req).read() == b'abc'
-#    assert server.request['args']['who'] == u'конь'
+#    assert server.request['args']['who'] == u'конь'.encode('cp1251')
 
 
 def test_custom_header_content_type(server):
@@ -250,8 +229,9 @@ def test_options_method(server):
 
 
 def test_multiple_start_stop_cycles():
-    for _ in range(30):
-        server2 = TestServer()
+    start_port = 10100
+    for cnt in range(30):
+        server2 = TestServer(port=start_port + cnt)
         server2.start()
         try:
             server2.response['data'] = b'zorro'
@@ -262,23 +242,6 @@ def test_multiple_start_stop_cycles():
             server2.stop()
 
 
-@pytest.mark.skip_engine('thread')
-def test_temp_files_are_removed():
-    server2 = TestServer(engine='subprocess')
-    server2.start()
-    files = [
-        server2.request_file,
-        server2.response_file,
-        server2.response_once_file,
-        server2.request_lock_file,
-        server2.response_lock_file,
-        server2.response_once_lock_file,
-    ]
-    server2.stop()
-    assert all(not os.path.exists(x) for x in files)
-
-
-@pytest.mark.skip_engine('subprocess')
 def test_data_generator(server):
 
     def data():
@@ -292,8 +255,7 @@ def test_data_generator(server):
     assert data2 == b'bar'
     with pytest.raises(URLError) as ex:
         urlopen(server.get_url())
-    assert ex.value.code == 405
-    assert ex.value.read() == b'data generator has no more data'
+    assert ex.value.code == 503
 
 
 def test_specific_port():

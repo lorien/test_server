@@ -1,7 +1,15 @@
 # Change Log of test-server Library
 
-## [0.0.30] - unreleased
+## [0.0.31] - unreleased
 ### Changed
+
+## [0.0.30] - 2018-05-01
+### Changed
+* Migrate to bottle/webtest/weitress from tornado
+* Items of `request['files'][key]` are dicts now
+
+### Removed
+* Removed subprocess mode
 
 ## [0.0.29] - 2018-04-17
 ### Changed
