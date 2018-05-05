@@ -10,19 +10,19 @@ from collections import defaultdict, Iterable
 
 import six
 from webtest.http import StopableWSGIServer
-import bottle
 from waitress import task
+import bottle
 
 from test_server.error import TestServerError
 
 __all__ = ('TestServer', 'WaitTimeoutError')
 logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
 
-#if six.PY3:
-#    # Original (from waitress.compat.tobytes):
-#    # def tobytes(s):
-#    #    return bytes(s, 'latin-1')
-#    task.tobytes = lambda x: bytes(x, 'utf-8')
+if six.PY3:
+    # Original (from waitress.compat.tobytes):
+    # def tobytes(s):
+    #    return bytes(s, 'latin-1')
+    task.tobytes = lambda x: bytes(x, 'utf-8')
 
 
 def _hval_custom(value):
