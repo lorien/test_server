@@ -10,7 +10,7 @@ ROOT = os.path.dirname(os.path.realpath(__file__))
 setup(
     # Meta data
     name='test-server',
-    version='0.0.30',
+    version='0.0.31',
     author='Gregory Petukhov',
     author_email='lorien@lorien.name',
     maintainer="Gregory Petukhov",

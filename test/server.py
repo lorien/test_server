@@ -5,6 +5,7 @@
 # pylint: disable=redefined-outer-name
 from threading import Thread
 import time
+#import socket
 from six.moves.urllib.error import HTTPError, URLError
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.parse import unquote
@@ -275,3 +276,27 @@ def test_null_bytes(server):
     res = urlopen(server.get_url())
     assert res.read() == b'zzz'
     assert unquote(server.request['path']) == '/\x00/'
+
+
+#def send_get_request(host, port, path):
+#    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+#    sock.connect((host, port))
+#    data = (
+#        b'GET %s HTTP/1.1\r\n'
+#        b'Host: %s\r\n'
+#        b'\r\n'
+#        #% (quote(path, safe='/').encode('utf-8'), host.encode('utf-8'))
+#        % (path, host.encode('utf-8'))
+#    )
+#    print(data)
+#    sock.send(data)
+#    data = sock.recv(1024 * 10)
+#    sock.close()
+#    return data
+
+
+def test_utf_header(server):
+    server.response['headers'] = [
+        ('Location', (server.get_url() + u'фыва').encode('utf-8'))
+    ]
+    urlopen(server.get_url())
