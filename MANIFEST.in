@@ -1,3 +1,4 @@
+include LICENSE
 include CHANGELOG.md
 include conftest.py
 include docs
@@ -7,5 +8,5 @@ include pylintrc
 include pytest.ini
 include README.rst
 include requirements_dev.txt
-recursive_include test *.py
+recursive-include test *.py
 include tox.ini
