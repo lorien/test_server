@@ -6,7 +6,11 @@ from threading import Thread, Event
 import time
 import types
 from six.moves.urllib.parse import urljoin
-from collections import defaultdict, Iterable
+from collections import defaultdict
+try:
+    from collections.abc import Iterable
+except ImportError:
+    from collections import Iterable
 
 import six
 from webtest.http import StopableWSGIServer
