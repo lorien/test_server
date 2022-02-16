@@ -8,5 +8,5 @@ include pylintrc
 include pytest.ini
 include README.rst
 include requirements_dev.txt
-recursive-include test *.py
+recursive-include tests *.py
 include tox.ini
