@@ -1,4 +1,4 @@
-.PHONY: clean upload viewdoc
+.PHONY: clean upload qa test
 
 clean:
 	find -name '*.pyc' -delete
@@ -8,5 +8,10 @@ clean:
 upload:
 	git push --tags; python setup.py sdist upload
 
-viewdoc:
-	x-www-browser docs/_build/html/index.html
+qa:
+	python setup.py check -s
+	flake8 setup.py test
+	pylint setup.py test_server test
+
+test:
+	tox -e py3
