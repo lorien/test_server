@@ -8,6 +8,7 @@ from http.server import BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urljoin, parse_qsl
 
+from test_server.version import TEST_SERVER_VERSION
 from test_server.error import TestServerError
 
 __all__ = ("TestServer", "WaitTimeoutError")
@@ -30,7 +31,7 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 class TestServerHandler(BaseHTTPRequestHandler):
     def get_param(self, key, method="get", clear_once=True):
         method_key = "%s.%s" % (method, key)
-        test_srv = self.server.test_server
+        test_srv = self.server.test_server  # pytype: disable=attribute-error
         if method_key in test_srv.response_once:
             value = test_srv.response_once[method_key]
             if clear_once:
@@ -51,9 +52,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             )
 
     def _request_handler(self):
-        from test_server import __version__  # pylint: disable=import-outside-toplevel
-
-        test_srv = self.server.test_server
+        test_srv = self.server.test_server  # pytype: disable=attribute-error
         method = self.command.lower()
 
         sleep = self.get_param("sleep", method)
@@ -143,9 +142,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
             for key, value in self.get_param("headers", method):
                 response["headers"].append((key, value))
 
-            response["headers"].append(
-                ("Listen-Port", str(self.server.test_server.port))
-            )
+            port = self.server.test_server.port  # pytype: disable=attribute-error
+            response["headers"].append(("Listen-Port", str(port)))
 
             data = self.get_param("data", method)
             charset = self.get_param("charset", method)
@@ -175,7 +173,9 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     )
                 )
             if "server" not in header_keys:
-                response["headers"].append(("Server", "TestServer/%s" % __version__))
+                response["headers"].append(
+                    ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
+                )
 
         self.send_response(response["code"])
         for key, val in response["headers"]:

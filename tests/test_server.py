@@ -1,4 +1,3 @@
-# pylint: disable=redefined-outer-name
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time

@@ -20,6 +20,6 @@ def fixture_global_server():
 
 
 @pytest.fixture(scope="function", name="server")
-def fixture_server(global_server):  # pylint: disable=redefined-outer-name
+def fixture_server(global_server):
     global_server.reset()
     return global_server
