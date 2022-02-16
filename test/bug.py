@@ -5,12 +5,14 @@
 import pytest
 
 from test_server import WaitTimeoutError
+
 # pylint: disable=unused-import
-from .server import global_server, server # noqa
+from .server import global_server, server  # noqa
+
 # pylint: enable=unused-import
 
 
-@pytest.mark.bug # noqa
+@pytest.mark.bug  # noqa
 def test_wait_timeout_error(server):
     """Need many iterations to be sure"""
     for _ in range(1000):
