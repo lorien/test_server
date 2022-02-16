@@ -3,11 +3,10 @@ import time
 from collections.abc import Iterable
 from threading import Thread, Event
 
-from six.moves.socketserver import ThreadingMixIn, TCPServer
-from six.moves.BaseHTTPServer import BaseHTTPRequestHandler
-from six.moves.http_cookies import SimpleCookie
-from six.moves.urllib.parse import urljoin, parse_qsl
-import six
+from socketserver import ThreadingMixIn, TCPServer
+from http.server import BaseHTTPRequestHandler
+from http.cookies import SimpleCookie
+from urllib.parse import urljoin, parse_qsl
 
 from test_server.error import TestServerError
 
@@ -78,7 +77,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             test_srv.request["headers"][key.lower()] = self.headers[key]
 
         path = self.path
-        if isinstance(path, six.binary_type):
+        if isinstance(path, bytes):
             path = path.decode("utf-8")
         test_srv.request["path"] = path.split("?")[0]
         test_srv.request["method"] = method.upper()
@@ -128,10 +127,10 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     for key, val in cb_res["cookies"]:
                         response["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
                 if "body" in cb_res:
-                    if isinstance(cb_res["body"], six.text_type):
+                    if isinstance(cb_res["body"], str):
                         # TODO: do not use hardcoded "utf-8"
                         response["data"] = cb_res["body"].encode("utf-8")
-                    elif isinstance(cb_res["body"], six.binary_type):
+                    elif isinstance(cb_res["body"], bytes):
                         response["data"] = cb_res["body"]
         else:
             response["code"] = self.get_param("code", method)
@@ -150,14 +149,14 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
             data = self.get_param("data", method)
             charset = self.get_param("charset", method)
-            if isinstance(data, six.text_type):
+            if isinstance(data, str):
                 response["data"] = data.encode(charset)
-            elif isinstance(data, six.binary_type):
+            elif isinstance(data, bytes):
                 response["data"] = data
             elif isinstance(data, Iterable):
                 try:
                     next_data = next(data)
-                    if isinstance(next_data, six.text_type):
+                    if isinstance(next_data, str):
                         next_data = next_data.encode("charset")
                     response["data"] = next_data
                 except StopIteration:

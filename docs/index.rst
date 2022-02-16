@@ -13,7 +13,7 @@ Basic example:
 .. code:: python
 
     from test_server import TestServer
-    from six.moves.urllib.request import urlopen
+    from urllib.request import urlopen
 
     server = TestServer()
     server.start()

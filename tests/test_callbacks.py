@@ -1,4 +1,4 @@
-from six.moves.urllib.request import urlopen
+from urllib.request import urlopen
 
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
 

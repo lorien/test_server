@@ -2,10 +2,9 @@
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time
-
-from six.moves.urllib.error import HTTPError
-from six.moves.urllib.request import urlopen, Request
-from six.moves.urllib.parse import unquote
+from urllib.error import HTTPError
+from urllib.request import urlopen, Request
+from urllib.parse import unquote
 
 import pytest
 
