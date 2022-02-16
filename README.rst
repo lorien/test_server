@@ -5,17 +5,7 @@ Test-server
 .. image:: https://travis-ci.org/lorien/test_server.png?branch=master
     :target: https://travis-ci.org/lorien/test_server
 
-.. image:: https://ci.appveyor.com/api/projects/status/o3qhdh1gprcu1x1x
-    :target: https://ci.appveyor.com/project/lorien/test-server
-
-.. image:: https://coveralls.io/repos/lorien/test_server/badge.svg?branch=master
-    :target: https://coveralls.io/r/lorien/test_server?branch=master
-
-.. image:: https://api.codacy.com/project/badge/Grade/3ff9f3ebf06d4b7f8809b264837eac43
-   :target: https://www.codacy.com/app/lorien/test_server?utm_source=github.com&utm_medium=referral&utm_content=lorien/test_server&utm_campaign=badger
-
-
-HTTP Server to test HTTP clients.
+Simple HTTP Server for testing HTTP clients.
 
 
 Installation
