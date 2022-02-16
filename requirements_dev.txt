@@ -3,6 +3,6 @@ coveralls
 flake8
 bumpversion
 pytest
-pytest-cov
 pylint
 sphinx
+pytype
