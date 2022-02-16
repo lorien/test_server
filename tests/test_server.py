@@ -1,10 +1,9 @@
 # pylint: disable=redefined-outer-name
-from pprint import pprint
+from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time
 
-# import socket
-from six.moves.urllib.error import HTTPError, URLError
+from six.moves.urllib.error import HTTPError
 from six.moves.urllib.request import urlopen, Request
 from six.moves.urllib.parse import unquote
 
@@ -13,7 +12,7 @@ import pytest
 from test_server import TestServer, WaitTimeoutError
 import test_server
 
-from .util import global_server, server  # pylint: disable=unused-import
+from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
 
 
 def test_get(server):

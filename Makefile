@@ -1,4 +1,4 @@
-.PHONY: clean upload qa test
+.PHONY: clean upload check test
 
 clean:
 	find -name '*.pyc' -delete
@@ -8,10 +8,8 @@ clean:
 upload:
 	git push --tags; python setup.py sdist upload
 
-qa:
-	python setup.py check -s
-	flake8 setup.py test
-	pylint setup.py test_server test
+check:
+	python setup.py check -s && pylint setup.py test_server tests && flake8 setup.py test_server tests
 
 test:
 	pytest

@@ -1,69 +1,21 @@
-from pprint import pprint
+from pprint import pprint  # pylint: disable=unused-import
 import time
-import logging
-from threading import Event
-
-# import types
-from select import select
-from six.moves.urllib.parse import urljoin, parse_qsl
-from collections import defaultdict
 from collections.abc import Iterable
 from threading import Thread, Event
+
 from six.moves.socketserver import ThreadingMixIn, TCPServer
 from six.moves.BaseHTTPServer import BaseHTTPRequestHandler
 from six.moves.http_cookies import SimpleCookie
-import os
+from six.moves.urllib.parse import urljoin, parse_qsl
 import six
 
-# from webtest.http import StopableWSGIServer
-# from waitress import task
-# import bottle
-#
-# from test_server.error import TestServerError
-#
+from test_server.error import TestServerError
+
 __all__ = ("TestServer", "WaitTimeoutError")
-# logger = logging.getLogger('test_server.server') # pylint: disable=invalid-name
-#
-# if six.PY3:
-#    # Original (from waitress.compat.tobytes):
-#    # def tobytes(s):
-#    #    return bytes(s, 'latin-1')
-#    task.tobytes = lambda x: bytes(x, 'utf-8')
-#
-#
-# def _hval_custom(value):
-#    value = bottle.tonat(value)
-#    if '\n' in value or '\r' in value:# or '\0' in value:
-#        raise ValueError(
-#            'Header value must not contain control characters: %r' % value
-#        )
-#    return value
-#
-#
-# bottle._hval_origin = bottle._hval # pylint: disable=protected-access
-# bottle._hval = _hval_custom # pylint: disable=protected-access
-#
-#
-#
+
+
 class WaitTimeoutError(Exception):
     pass
-
-
-# def bytes_to_unicode(obj, charset):
-#    if isinstance(obj, six.text_type):
-#        return obj
-#    elif isinstance(obj, six.binary_type):
-#        return obj.decode(charset)
-#    elif isinstance(obj, list):
-#        return [bytes_to_unicode(x, charset) for x in obj]
-#    elif isinstance(obj, tuple):
-#        return tuple(bytes_to_unicode(x, charset) for x in obj)
-#    elif isinstance(obj, dict):
-#        return dict(bytes_to_unicode(x, charset) for x in obj.items())
-#    else:
-#        return obj
-#
-#
 
 
 class ThreadingTCPServer(ThreadingMixIn, TCPServer):
@@ -99,15 +51,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 "Parameter %s does not exists in " "server response data" % key
             )
 
-    #    ## pylint: disable=arguments-differ
-    #    #def decode_argument(self, value, **kwargs):
-    #    #    # pylint: disable=unused-argument
-    #    #    return value.decode(self._server.request['charset'])
-
     def _request_handler(self):
-        from test_server import __version__
-
-        # from bottle import request, LocalResponse
+        from test_server import __version__  # pylint: disable=import-outside-toplevel
 
         test_srv = self.server.test_server
         method = self.command.lower()
@@ -123,7 +68,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         except IndexError:
             qs = ""
         params = dict(parse_qsl(qs))
-        for key in params.keys():
+        for key in params:
             test_srv.request["args"][key] = (
                 params[key]
                 # request.params.getunicode(key) # pylint: disable=no-member
@@ -167,7 +112,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
         callback = self.get_param("callback", method)
         if callback:
-            cb_res = next(callback)
+            cb_res = callback()
             assert isinstance(cb_res, dict) and cb_res.get("type") in ("response",)
             if cb_res["type"] == "response":
                 assert all(
@@ -175,7 +120,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     for x in cb_res.keys()
                 )
                 if "code" in cb_res:
-                    response["code"] = code
+                    response["code"] = cb_res["code"]
                 if "headers" in cb_res:
                     for key, val in cb_res["headers"]:
                         response["headers"].append((key, val))
@@ -184,7 +129,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
                         response["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
                 if "body" in cb_res:
                     if isinstance(cb_res["body"], six.text_type):
-                        response["data"] = cb_res["body"].encode(charset)
+                        # TODO: do not use hardcoded "utf-8"
+                        response["data"] = cb_res["body"].encode("utf-8")
                     elif isinstance(cb_res["body"], six.binary_type):
                         response["data"] = cb_res["body"]
         else:
@@ -331,7 +277,6 @@ class TestServer(object):
         # TODO
         # self._server.shutdown()
         # self._thread.join()
-        pass
 
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""

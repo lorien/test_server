@@ -1,12 +1,9 @@
 [flake8]
-# https://flake8.readthedocs.io/en/2.0/warnings.html
-# E261 - at least two spaces before inline comment
-# E265 - block comment should start with '#'
-# W503 - line break occured before a binary operator
-# F811 - redefinition of unused name
-# F401 - name imported but unused
-# H301 - one import per line
-ignore = E261,E265,W503,F811,F401,H301
-copyright-check = True
-copyright-author = Gregory Petukhov \(lorien@lorien\.name\)
-copyright-min-file-size=5
+# E261 at least two spaces before inline comment
+# E265 block comment should start with '# '
+# E121 continuation line under-indented for hanging indent
+# E125 continuation line with same indent as next logical line
+# F401 'pprint.pprint' imported but unused, CHECKED BY PYLINT
+# F841 local variable 'suffix' is assigned to but never used, CHECKED BY PYLINT
+ignore=E261,E265,E121,E125,F401,F841
+max-line-length=88
