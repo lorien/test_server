@@ -14,4 +14,4 @@ qa:
 	pylint setup.py test_server test
 
 test:
-	tox -e py3
+	pytest

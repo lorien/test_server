@@ -9,7 +9,7 @@ STATE = {"server": None}
 def global_server():
     if not STATE["server"]:
         print("[!] Starting server")
-        srv = TestServer(port=9999)
+        srv = TestServer(port=9998)
         srv.start(daemon=True)
         STATE["server"] = srv
     yield STATE["server"]

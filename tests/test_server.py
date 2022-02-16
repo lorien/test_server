@@ -1,8 +1,5 @@
-# coding: utf-8
-# Copyright 2015-2017 Gregory Petukhov (lorien@lorien.name)
-# *
-# Licensed under the MIT License
 # pylint: disable=redefined-outer-name
+from pprint import pprint
 from threading import Thread
 import time
 
@@ -148,13 +145,6 @@ def test_wait_request(server):
     # print('.test_wait_request(): last line')
 
 
-def test_wait_timeout_error(server):
-    """Need many iterations to be sure"""
-    # print('.test_wait_timeout_error(): started')
-    with pytest.raises(WaitTimeoutError):
-        server.wait_request(0.01)
-
-
 def test_request_cookies(server):
     req = Request(url=server.get_url())
     req.add_header("Cookie", "foo=bar")
@@ -240,19 +230,19 @@ def test_multiple_start_stop_cycles():
             server2.stop()
 
 
-def test_data_generator(server):
-    def data():
-        yield b"foo"
-        yield b"bar"
-
-    server.response["data"] = data()
-    data1 = urlopen(server.get_url()).read()
-    assert data1 == b"foo"
-    data2 = urlopen(server.get_url()).read()
-    assert data2 == b"bar"
-    with pytest.raises(URLError) as ex:
-        urlopen(server.get_url())
-    assert ex.value.code == 503
+# def test_data_generator(server):
+#    def data():
+#        yield b"foo"
+#        yield b"bar"
+#
+#    server.response["data"] = data()
+#    data1 = urlopen(server.get_url()).read()
+#    assert data1 == b"foo"
+#    data2 = urlopen(server.get_url()).read()
+#    assert data2 == b"bar"
+#    with pytest.raises(URLError) as ex:
+#        urlopen(server.get_url())
+#    assert ex.value.code == 503
 
 
 def test_specific_port():
