@@ -1,7 +1,11 @@
 # Change Log of test-server Library
 
-## [0.0.31] - unreleased
+## [0.0.32] - unreleased
 ### Changed
+
+## [0.0.31] - 2018-05-05
+### Added
+* Add support for non-ascii headers
 
 ## [0.0.30] - 2018-05-01
 ### Changed
