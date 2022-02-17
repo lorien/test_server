@@ -256,10 +256,16 @@ class TestServer(object):
         self.wait_server_started()
 
     def wait_server_started(self):
+        # I could not foind another way
+        # to handle multiple socket issues
+        # other than taking some sleep
+        time.sleep(0.01)
         self.server_started.wait()
 
     def stop(self):
-        self._server.shutdown()
+        if self._server:
+            self._server.shutdown()
+            self._server.server_close()
 
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""
