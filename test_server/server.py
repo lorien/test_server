@@ -4,6 +4,7 @@ from collections.abc import Iterable
 from threading import Thread, Event
 import cgi
 from io import BytesIO
+from copy import deepcopy
 
 from socketserver import ThreadingMixIn, TCPServer
 from http.server import BaseHTTPRequestHandler
@@ -14,6 +15,18 @@ from test_server.version import TEST_SERVER_VERSION
 from test_server.error import TestServerError
 
 __all__ = ("TestServer", "WaitTimeoutError")
+
+CLEAN_RESPONSE = {
+    "status": 200,
+    "data": "",
+    "headers": [],
+    "cookies": [],
+    "callback": None,
+    "sleep": None,
+    "charset": "utf-8",
+}
+VALID_RESPONSE_KEYS = list(CLEAN_RESPONSE.keys())
+VALID_METHODS = ["get", "post", "put", "delete", "options", "patch"]
 
 
 class WaitTimeoutError(Exception):
@@ -198,10 +211,10 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
     do_GET = _request_handler
     do_POST = _request_handler
+    do_PUT = _request_handler
     do_DELETE = _request_handler
     do_OPTIONS = _request_handler
     do_PATCH = _request_handler
-    do_PUT = _request_handler
 
 
 class TestServer(object):
@@ -242,17 +255,7 @@ class TestServer(object):
             }
         )
         self.response.clear()
-        self.response.update(
-            {
-                "status": 200,
-                "data": "",
-                "headers": [],
-                "cookies": [],
-                "callback": None,
-                "sleep": None,
-                "charset": "utf-8",
-            }
-        )
+        self.response.update(deepcopy(CLEAN_RESPONSE))
         self.response_once.clear()
 
     def thread_server(self):
@@ -289,6 +292,8 @@ class TestServer(object):
 
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""
+        # Yeah, stupid, just tryng to fail my Grab tests ASAP
+        self.validate_response_keys()
         if port is None:
             port = self.port
         return urljoin("http://%s:%d" % (self.address, port), path)
@@ -315,3 +320,19 @@ class TestServer(object):
             return self.response[key]
         else:
             raise TestServerError("Response parameter {} is not configured".format(key))
+
+    def validate_response_keys(self):
+        for scope_name, scope in [
+            ("response", self.response),
+            ("response_once", self.response_once),
+        ]:
+            for key_item in scope:
+                if "." in key_item:
+                    method, key = key_item.split(".", 1)
+                else:
+                    method = None
+                    key = key_item
+                if (
+                    method and method not in VALID_METHODS
+                ) or key not in VALID_RESPONSE_KEYS:
+                    raise TestServerError("Invalid %s key: %s" % (scope_name, key_item))
