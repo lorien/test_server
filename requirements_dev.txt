@@ -1,5 +1,4 @@
 coverage
-coveralls
 flake8
 bumpversion
 pytest

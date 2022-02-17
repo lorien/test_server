@@ -7,7 +7,7 @@ from urllib.parse import unquote
 
 import pytest
 
-from test_server import TestServer, WaitTimeoutError
+from test_server import TestServer, WaitTimeoutError, TestServerError
 import test_server
 
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
@@ -52,6 +52,17 @@ def test_response_once_get(server):
     server.response_once["data"] = b"tmp"
     assert urlopen(server.get_url()).read() == b"tmp"
     assert urlopen(server.get_url()).read() == b"base"
+
+
+def test_response_once_specific_method(server):
+    server.response_once["data"] = b"foo"
+    server.response_once["get.data"] = b"bar"
+    assert urlopen(server.get_url()).read() == b"bar"
+
+
+def test_get_param_unconfigured(server):
+    with pytest.raises(TestServerError):
+        server.get_param("FOOBAR")
 
 
 def test_response_once_headers(server):
@@ -101,8 +112,9 @@ def test_response_once_code(server):
     info = urlopen(server.get_url())
     assert info.getcode() == 200
     server.response_once["code"] = 403
-    with pytest.raises(HTTPError):
+    with pytest.raises(HTTPError) as ex:
         urlopen(server.get_url())
+    assert ex.value.status == 403
     info = urlopen(server.get_url())
     assert info.getcode() == 200
 
@@ -227,21 +239,6 @@ def test_multiple_start_stop_cycles():
             server2.stop()
 
 
-# def test_data_generator(server):
-#    def data():
-#        yield b"foo"
-#        yield b"bar"
-#
-#    server.response["data"] = data()
-#    data1 = urlopen(server.get_url()).read()
-#    assert data1 == b"foo"
-#    data2 = urlopen(server.get_url()).read()
-#    assert data2 == b"bar"
-#    with pytest.raises(URLError) as ex:
-#        urlopen(server.get_url())
-#    assert ex.value.code == 503
-
-
 def test_specific_port():
     server = TestServer(address="localhost", port=9876)
     server.start()
@@ -283,3 +280,59 @@ def test_utf_header(server):
         ("Location", (server.get_url() + u"фыва").encode("utf-8"))
     ]
     urlopen(server.get_url())
+
+
+def test_callback(server):
+    non_ascii_str = "фыва"
+
+    def get_callback():
+        return {
+            "type": "response",
+            "body": b"Hello",
+            "headers": [
+                ("method", "get"),
+            ],
+        }
+
+    def post_callback():
+        return {
+            "code": 201,
+            "type": "response",
+            "body": non_ascii_str,
+            "headers": [
+                ("method", "post"),
+            ],
+            "cookies": [
+                ("foo", "bar"),
+            ],
+        }
+
+    server.response["callback"] = get_callback
+    info = urlopen(server.get_url())
+    assert info.headers["method"] == "get"
+    assert info.read() == b"Hello"
+
+    server.response["post.callback"] = post_callback
+    info = urlopen(server.get_url(), b"key=val")
+    assert info.headers["method"] == "post"
+    assert info.headers["set-cookie"] == "foo=bar"
+    assert info.read() == non_ascii_str.encode("utf-8")
+    assert info.status == 201
+
+
+def test_response_data_iterable(server):
+    server.response["data"] = iter(["foo", "bar"])
+    res = urlopen(server.get_url())
+    assert res.read() == b"foo"
+    res = urlopen(server.get_url())
+    assert res.read() == b"bar"
+    with pytest.raises(HTTPError) as ex:
+        urlopen(server.get_url())
+    assert ex.value.status == 503
+
+
+def test_response_data_invalid_type(server):
+    server.response["data"] = 1
+    with pytest.raises(HTTPError) as ex:
+        urlopen(server.get_url())
+    assert ex.value.status == 500

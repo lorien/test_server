@@ -1,4 +1,13 @@
-.PHONY: clean upload check test
+.PHONY: build venv deps clean upload check test
+
+build: venv deps
+
+venv:
+	virtualenv -p python3 .env
+
+deps:
+	.env/bin/pip install -r requirements_dev.txt
+
 
 clean:
 	find -name '*.pyc' -delete
@@ -15,4 +24,5 @@ check:
 		&& pytype setup.py test_server tests
 
 test:
-	pytest
+	coverage run -m pytest \
+		&& coverage report -m

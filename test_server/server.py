@@ -29,33 +29,11 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 
 
 class TestServerHandler(BaseHTTPRequestHandler):
-    def get_param(self, key, method="get", clear_once=True):
-        method_key = "%s.%s" % (method, key)
-        test_srv = self.server.test_server  # pytype: disable=attribute-error
-        if method_key in test_srv.response_once:
-            value = test_srv.response_once[method_key]
-            if clear_once:
-                del test_srv.response_once[method_key]
-            return value
-        elif key in test_srv.response_once:
-            value = test_srv.response_once[key]
-            if clear_once:
-                del test_srv.response_once[key]
-            return value
-        elif method_key in test_srv.response:
-            return test_srv.response[method_key]
-        elif key in test_srv.response:
-            return test_srv.response[key]
-        else:
-            raise TestServerError(
-                "Parameter %s does not exists in " "server response data" % key
-            )
-
     def _request_handler(self):
         test_srv = self.server.test_server  # pytype: disable=attribute-error
         method = self.command.lower()
 
-        sleep = self.get_param("sleep", method)
+        sleep = test_srv.get_param("sleep", method)
         if sleep:
             time.sleep(sleep)
         test_srv.request["client_ip"] = self.client_address[0]
@@ -76,8 +54,9 @@ class TestServerHandler(BaseHTTPRequestHandler):
             test_srv.request["headers"][key.lower()] = self.headers[key]
 
         path = self.path
-        if isinstance(path, bytes):
-            path = path.decode("utf-8")
+        # WTF is this?
+        # if isinstance(path, bytes):
+        #    path = path.decode("utf-8")
         test_srv.request["path"] = path.split("?")[0]
         test_srv.request["method"] = method.upper()
 
@@ -108,7 +87,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             "data": b"",
         }
 
-        callback = self.get_param("callback", method)
+        callback = test_srv.get_param("callback", method)
         if callback:
             cb_res = callback()
             assert isinstance(cb_res, dict) and cb_res.get("type") in ("response",)
@@ -132,21 +111,21 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     elif isinstance(cb_res["body"], bytes):
                         response["data"] = cb_res["body"]
         else:
-            response["code"] = self.get_param("code", method)
+            response["code"] = test_srv.get_param("code", method)
 
-            for key, val in self.get_param("cookies", method):
+            for key, val in test_srv.get_param("cookies", method):
                 # Set-Cookie: name=newvalue; expires=date;
                 # path=/; domain=.example.org.
                 response["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
 
-            for key, value in self.get_param("headers", method):
+            for key, value in test_srv.get_param("headers", method):
                 response["headers"].append((key, value))
 
             port = self.server.test_server.port  # pytype: disable=attribute-error
             response["headers"].append(("Listen-Port", str(port)))
 
-            data = self.get_param("data", method)
-            charset = self.get_param("charset", method)
+            data = test_srv.get_param("data", method)
+            charset = test_srv.get_param("charset", method)
             if isinstance(data, str):
                 response["data"] = data.encode(charset)
             elif isinstance(data, bytes):
@@ -155,13 +134,13 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 try:
                     next_data = next(data)
                     if isinstance(next_data, str):
-                        next_data = next_data.encode("charset")
+                        next_data = next_data.encode(charset)
                     response["data"] = next_data
                 except StopIteration:
                     response["code"] = 503
             else:
-                raise TestServerError(
-                    "Data parameter should " "be string or iterable " "object"
+                self.write_response_data(
+                    500, [], b'Response parameter "data" must be string or iterable'
                 )
 
             header_keys = [x[0].lower() for x in response["headers"]]
@@ -177,16 +156,17 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
                 )
 
-        self.send_response(response["code"])
-        for key, val in response["headers"]:
-            self.send_header(key, val)
-        self.end_headers()
-        self.wfile.write(response["data"])
+        self.write_response_data(
+            response["code"], response["headers"], response["data"]
+        )
         test_srv.request["done"] = True
 
-    do_GET = _request_handler
-    do_POST = _request_handler
-    do_OPTIONS = _request_handler
+    def write_response_data(self, code, headers, data):
+        self.send_response(code)
+        for key, val in headers:
+            self.send_header(key, val)
+        self.end_headers()
+        self.wfile.write(data)
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
     def send_response(self, code, message=None):
@@ -195,6 +175,12 @@ class TestServerHandler(BaseHTTPRequestHandler):
         """
         self.log_request(code)
         self.send_response_only(code, message)
+
+    do_GET = _request_handler
+    do_POST = _request_handler
+    do_OPTIONS = _request_handler
+    do_PATCH = _request_handler
+    do_PUT = _request_handler
 
 
 class TestServer(object):
@@ -254,10 +240,11 @@ class TestServer(object):
         This function is supposed to be run in separate thread.
         """
 
+        print("PORT", self.port)
         self._server = ThreadingTCPServer(
             (self.address, self.port), TestServerHandler, test_server=self
         )
-        self._server.serve_forever()
+        self._server.serve_forever(poll_interval=0.1)
 
     def start(self, daemon=True):
         """Start the HTTP server."""
@@ -272,16 +259,13 @@ class TestServer(object):
         self.server_started.wait()
 
     def stop(self):
-        """Stop tornado loop and wait for thread finished it work."""
-        # TODO
-        # self._server.shutdown()
-        # self._thread.join()
+        self._server.shutdown()
 
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""
         if port is None:
             port = self.port
-        return urljoin("http://%s:%d/" % (self.address, port), path)
+        return urljoin("http://%s:%d" % (self.address, port), path)
 
     def wait_request(self, timeout):
         """Stupid implementation that eats CPU."""
@@ -292,3 +276,16 @@ class TestServer(object):
             time.sleep(0.01)
             if time.time() - start > timeout:
                 raise WaitTimeoutError("No request processed in %d seconds" % timeout)
+
+    def get_param(self, key, method="get"):
+        method_key = "%s.%s" % (method, key)
+        if method_key in self.response_once:
+            return self.response_once.pop(method_key)
+        elif key in self.response_once:
+            return self.response_once.pop(key)
+        elif method_key in self.response:
+            return self.response[method_key]
+        elif key in self.response:
+            return self.response[key]
+        else:
+            raise TestServerError("Response parameter {} is not configured".format(key))
