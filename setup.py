@@ -14,7 +14,7 @@ setup(
     maintainer_email="lorien@lorien.name",
     url="https://github.com/lorien/test_server",
     description="Server for testing HTTP clients",
-    long_description=open(os.path.join(ROOT, "README.rst")).read(),
+    long_description=open(os.path.join(ROOT, "README.rst"), encoding="utf-8").read(),
     download_url="https://pypi.python.org/pypi/test-server",
     keywords="test testing server http-server",
     license="MIT License",

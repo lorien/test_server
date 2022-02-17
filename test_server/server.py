@@ -1,3 +1,4 @@
+# pylint: disable=consider-using-f-string
 from pprint import pprint  # pylint: disable=unused-import
 import time
 from collections.abc import Iterable
@@ -59,14 +60,11 @@ class TestServerHandler(BaseHTTPRequestHandler):
         except IndexError:
             qs = ""
         params = dict(parse_qsl(qs))
-        for key in params:
-            test_srv.request["args"][key] = (
-                params[key]
-                # request.params.getunicode(key) # pylint: disable=no-member
-            )
+        for key, val in params.items():
+            test_srv.request["args"][key] = val
         #    #test_srv.request['args_binary'][key] = request.params[key]
-        for key in self.headers.keys():
-            test_srv.request["headers"][key.lower()] = self.headers[key]
+        for key, val in self.headers.items():
+            test_srv.request["headers"][key.lower()] = val
 
         path = self.path
         # WTF is this?
@@ -77,10 +75,10 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
         cookies = {}
         items = SimpleCookie(self.headers["Cookie"])
-        for key in items.keys():
-            cookies[key] = {}
-            cookies[key]["name"] = key
-            cookies[key]["value"] = items[key].value
+        for item_key, item in items.items():
+            cookies[item_key] = {}
+            cookies[item_key]["name"] = item_key
+            cookies[item_key]["value"] = item.value
         test_srv.request["cookies"] = cookies
 
         clen = int(self.headers["Content-Length"] or "0")
@@ -100,7 +98,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     "CONTENT_TYPE": self.headers["Content-Type"],
                 },
             )
-            for field_key in form.keys():
+            for field_key in form.keys():  # pylint: disable=consider-using-dict-items
                 box = form[field_key]
                 for field in box if isinstance(box, list) else [box]:
                     test_srv.request["files"].setdefault(field_key, []).append(
@@ -202,12 +200,12 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
-    def send_response(self, status, message=None):
+    def send_response(self, code, message=None):
         """
         Custom method which does not send Server and Date headers
         """
-        self.log_request(status)
-        self.send_response_only(status, message)
+        self.log_request(code)
+        self.send_response_only(code, message)
 
     do_GET = _request_handler
     do_POST = _request_handler

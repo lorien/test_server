@@ -1,10 +1,11 @@
+# pylint: disable=consider-using-f-string
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time
-from urllib3 import PoolManager
 from urllib.parse import unquote
-from urllib3.util.retry import Retry
 
+from urllib3 import PoolManager
+from urllib3.util.retry import Retry
 import pytest
 
 from test_server import TestServer, WaitTimeoutError, TestServerError
@@ -105,7 +106,7 @@ def test_response_once_headers(server):
 
 
 def test_request_headers(server):
-    res = request(server.get_url(), headers={"Foo": "Bar"})
+    request(server.get_url(), headers={"Foo": "Bar"})
     assert server.request["headers"]["foo"] == "Bar"
 
 
@@ -174,7 +175,7 @@ def test_wait_request(server):
 
 
 def test_request_cookies(server):
-    res = request(url=server.get_url(), headers={"Cookie": "foo=bar"})
+    request(url=server.get_url(), headers={"Cookie": "foo=bar"})
     assert server.request["cookies"]["foo"]["value"] == "bar"
 
 
