@@ -2,6 +2,8 @@ from pprint import pprint  # pylint: disable=unused-import
 import time
 from collections.abc import Iterable
 from threading import Thread, Event
+import cgi
+from io import BytesIO
 
 from socketserver import ThreadingMixIn, TCPServer
 from http.server import BaseHTTPRequestHandler
@@ -69,20 +71,37 @@ class TestServerHandler(BaseHTTPRequestHandler):
         test_srv.request["cookies"] = cookies
 
         clen = int(self.headers["Content-Length"] or "0")
-        test_srv.request["data"] = self.rfile.read(clen)
+        request_data = self.rfile.read(clen)
+        test_srv.request["data"] = request_data
 
-        # self._server.request['files'] = defaultdict(list)
-        # for file_ in request.files.values(): # pylint: disable=no-member
-        #    self._server.request['files'][file_.name].append({
-        #        'name': file_.name,
-        #        'raw_filename': file_.raw_filename,
-        #        'content_type': file_.content_type,
-        #        'filename': file_.filename,
-        #        'content': file_.file.read(),
-        #    })
+        # ctype, pdict = cgi.parse_header(self.headers["Content-Type"])
+        ctype = self.headers["Content-Type"]
+        if ctype and ctype.split(";")[0] == "multipart/form-data":
+            # pdict["boundary"] = bytes(pdict["boundary"], "utf-8")
+            # pdict["CONTENT-LENGTH"] = int(self.headers["Content-Length"])
+            form = cgi.FieldStorage(
+                fp=BytesIO(request_data),
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": self.headers["Content-Type"],
+                },
+            )
+            for field_key in form.keys():
+                box = form[field_key]
+                for field in box if isinstance(box, list) else [box]:
+                    test_srv.request["files"].setdefault(field_key, []).append(
+                        {
+                            "name": field_key,
+                            # "raw_filename": None,
+                            "content_type": field.type,
+                            "filename": field.filename,
+                            "content": field.file.read(),
+                        }
+                    )
 
         response = {
-            "code": 200,
+            "status": 200,
             "headers": [],
             "data": b"",
         }
@@ -92,12 +111,13 @@ class TestServerHandler(BaseHTTPRequestHandler):
             cb_res = callback()
             assert isinstance(cb_res, dict) and cb_res.get("type") in ("response",)
             if cb_res["type"] == "response":
-                assert all(
-                    x in ("type", "code", "headers", "cookies", "body")
-                    for x in cb_res.keys()
-                )
-                if "code" in cb_res:
-                    response["code"] = cb_res["code"]
+                for key in cb_res:
+                    if key not in ("type", "status", "headers", "cookies", "body"):
+                        raise TestServerError(
+                            "Callback response contains invalid key: %s" % key
+                        )
+                if "status" in cb_res:
+                    response["status"] = cb_res["status"]
                 if "headers" in cb_res:
                     for key, val in cb_res["headers"]:
                         response["headers"].append((key, val))
@@ -111,7 +131,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     elif isinstance(cb_res["body"], bytes):
                         response["data"] = cb_res["body"]
         else:
-            response["code"] = test_srv.get_param("code", method)
+            response["status"] = test_srv.get_param("status", method)
 
             for key, val in test_srv.get_param("cookies", method):
                 # Set-Cookie: name=newvalue; expires=date;
@@ -137,7 +157,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                         next_data = next_data.encode(charset)
                     response["data"] = next_data
                 except StopIteration:
-                    response["code"] = 503
+                    response["status"] = 503
             else:
                 self.write_response_data(
                     500, [], b'Response parameter "data" must be string or iterable'
@@ -157,27 +177,28 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 )
 
         self.write_response_data(
-            response["code"], response["headers"], response["data"]
+            response["status"], response["headers"], response["data"]
         )
         test_srv.request["done"] = True
 
-    def write_response_data(self, code, headers, data):
-        self.send_response(code)
+    def write_response_data(self, status, headers, data):
+        self.send_response(status)
         for key, val in headers:
             self.send_header(key, val)
         self.end_headers()
         self.wfile.write(data)
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
-    def send_response(self, code, message=None):
+    def send_response(self, status, message=None):
         """
         Custom method which does not send Server and Date headers
         """
-        self.log_request(code)
-        self.send_response_only(code, message)
+        self.log_request(status)
+        self.send_response_only(status, message)
 
     do_GET = _request_handler
     do_POST = _request_handler
+    do_DELETE = _request_handler
     do_OPTIONS = _request_handler
     do_PATCH = _request_handler
     do_PUT = _request_handler
@@ -223,7 +244,7 @@ class TestServer(object):
         self.response.clear()
         self.response.update(
             {
-                "code": 200,
+                "status": 200,
                 "data": "",
                 "headers": [],
                 "cookies": [],
@@ -240,7 +261,6 @@ class TestServer(object):
         This function is supposed to be run in separate thread.
         """
 
-        print("PORT", self.port)
         self._server = ThreadingTCPServer(
             (self.address, self.port), TestServerHandler, test_server=self
         )

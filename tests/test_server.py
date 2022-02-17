@@ -1,9 +1,9 @@
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time
-from urllib.error import HTTPError
-from urllib.request import urlopen, Request
+from urllib3 import PoolManager
 from urllib.parse import unquote
+from urllib3.util.retry import Retry
 
 import pytest
 
@@ -14,58 +14,74 @@ from .util import fixture_global_server, fixture_server  # pylint: disable=unuse
 
 NETWORK_TIMEOUT = 1
 EXTRA_PORT = 10100
+pool = PoolManager()
 
 
-def request(url, data=None, **kwargs):
-    kwargs.setdefault("timeout", NETWORK_TIMEOUT)
-    return urlopen(url, data, **kwargs)
+def request(url, data=None, method=None, headers=None, fields=None):
+    params = {
+        "headers": headers,
+        "timeout": NETWORK_TIMEOUT,
+        "retries": Retry(
+            connect=0,
+            read=0,
+            redirect=10,
+            other=0,
+        ),
+        "fields": fields,
+    }
+    if data:
+        assert isinstance(data, bytes)
+        params["body"] = data
+    if not method:
+        method = "POST" if (data or fields) else "GET"
+    return pool.request(method, url, **params)
 
 
 def test_get(server):
     valid_data = b"zorro"
     server.response["data"] = valid_data
-    data = request(server.get_url()).read()
-    assert data == valid_data
+    res = request(server.get_url())
+    assert res.data == valid_data
 
 
 def test_non_utf_request_data(server):
     server.request["charset"] = "cp1251"
     server.response["data"] = "abc"
-    req = Request(url=server.get_url(), data=u"конь".encode("cp1251"))
-    assert request(req).read() == b"abc"
+    res = request(url=server.get_url(), data=u"конь".encode("cp1251"))
+    assert res.data == b"abc"
     assert server.request["data"] == u"конь".encode("cp1251")
 
 
 def test_request_client_ip(server):
-    request(server.get_url()).read()
+    request(server.get_url())
     assert server.address == server.request["client_ip"]
 
 
 def test_path(server):
-    request(server.get_url("/foo?bar=1")).read()
+    request(server.get_url("/foo?bar=1"))
     assert server.request["path"] == "/foo"
     assert server.request["args"]["bar"] == "1"
 
 
 def test_post(server):
     server.response["post.data"] = b"resp-data"
-    data = request(server.get_url(), b"req-data").read()
+    data = request(server.get_url(), b"req-data").data
     assert data == b"resp-data"
     assert server.request["data"] == b"req-data"
 
 
 def test_response_once_get(server):
     server.response["data"] = b"base"
-    assert request(server.get_url()).read() == b"base"
+    assert request(server.get_url()).data == b"base"
     server.response_once["data"] = b"tmp"
-    assert request(server.get_url()).read() == b"tmp"
-    assert request(server.get_url()).read() == b"base"
+    assert request(server.get_url()).data == b"tmp"
+    assert request(server.get_url()).data == b"base"
 
 
 def test_response_once_specific_method(server):
     server.response_once["data"] = b"foo"
     server.response_once["get.data"] = b"bar"
-    assert request(server.get_url()).read() == b"bar"
+    assert request(server.get_url()).data == b"bar"
 
 
 def test_get_param_unconfigured(server):
@@ -89,8 +105,7 @@ def test_response_once_headers(server):
 
 
 def test_request_headers(server):
-    req = Request(server.get_url(), headers={"Foo": "Bar"})
-    request(req).read()
+    res = request(server.get_url(), headers={"Foo": "Bar"})
     assert server.request["headers"]["foo"] == "Bar"
 
 
@@ -117,14 +132,13 @@ def test_method_sleep(server):
 
 
 def test_response_once_code(server):
-    info = request(server.get_url())
-    assert info.getcode() == 200
-    server.response_once["code"] = 403
-    with pytest.raises(HTTPError) as ex:
-        request(server.get_url())
-    assert ex.value.status == 403
-    info = request(server.get_url())
-    assert info.getcode() == 200
+    res = request(server.get_url())
+    assert res.status == 200
+    server.response_once["status"] = 403
+    res = request(server.get_url())
+    assert res.status == 403
+    res = request(server.get_url())
+    assert res.status == 200
 
 
 def test_request_done_after_start(server):
@@ -138,18 +152,16 @@ def test_request_done_after_start(server):
 
 def test_request_done(server):
     assert server.request["done"] is False
-    request(server.get_url()).read()
+    request(server.get_url())
     assert server.request["done"] is True
 
 
 def test_wait_request(server):
     server.response["data"] = b"foo"
-    # print('.test_wait_request(): started')
 
     def worker():
         time.sleep(1)
-        request(server.get_url() + "?method=test-wait-request").read()
-        # print('.test_wait_request(): end of thread')
+        request(server.get_url() + "?method=test-wait-request")
 
     th = Thread(target=worker)
     th.start()
@@ -159,13 +171,10 @@ def test_wait_request(server):
     # res = result.get()
     # assert res == b'foo'
     th.join()
-    # print('.test_wait_request(): last line')
 
 
 def test_request_cookies(server):
-    req = Request(url=server.get_url())
-    req.add_header("Cookie", "foo=bar")
-    request(req)
+    res = request(url=server.get_url(), headers={"Cookie": "foo=bar"})
     assert server.request["cookies"]["foo"]["value"] == "bar"
 
 
@@ -195,7 +204,7 @@ def test_default_header_content_type(server):
 #    req = Request(
 #        url=server.get_url() + quote(u'?who=конь'.encode('cp1251'), safe='?=')
 #    )
-#    assert request(req).read() == b'abc'
+#    assert request(req).data == b'abc'
 #    assert server.request['args']['who'] == u'конь'.encode('cp1251')
 
 
@@ -218,19 +227,9 @@ def test_custom_header_server(server):
 
 def test_options_method(server):
     server.response["data"] = b"abc"
-
-    class RequestWithMethod(Request):
-        def __init__(self, method, *args, **kwargs):
-            self._method = method
-            Request.__init__(self, *args, **kwargs)
-
-        def get_method(self):
-            return self._method
-
-    req = RequestWithMethod(url=server.get_url(), method="OPTIONS")
-    info = request(req)
+    res = request(url=server.get_url(), method="OPTIONS")
     assert server.request["method"] == "OPTIONS"
-    assert info.read() == b"abc"
+    assert res.data == b"abc"
 
 
 def test_multiple_start_stop_cycles():
@@ -240,7 +239,7 @@ def test_multiple_start_stop_cycles():
         try:
             server2.response["data"] = b"zorro"
             for _ in range(10):
-                data = request(server2.get_url()).read()
+                data = request(server2.get_url()).data
                 assert data == b"zorro"
         finally:
             server2.stop()
@@ -251,20 +250,20 @@ def test_specific_port():
     try:
         server.start()
         server.response["data"] = b"abc"
-        data = request(server.get_url()).read()
+        data = request(server.get_url()).data
         assert data == b"abc"
     finally:
         server.stop()
 
 
 def test_null_bytes(server):
-    server.response_once["code"] = 302
+    server.response_once["status"] = 302
     server.response_once["headers"] = [
         ("Location", server.get_url().rstrip("/") + "/\x00/")
     ]
     server.response["data"] = "zzz"
     res = request(server.get_url())
-    assert res.read() == b"zzz"
+    assert res.data == b"zzz"
     assert unquote(server.request["path"]) == "/\x00/"
 
 
@@ -278,7 +277,6 @@ def test_null_bytes(server):
 #        #% (quote(path, safe='/').encode('utf-8'), host.encode('utf-8'))
 #        % (path, host.encode('utf-8'))
 #    )
-#    print(data)
 #    sock.send(data)
 #    data = sock.recv(1024 * 10)
 #    sock.close()
@@ -306,7 +304,7 @@ def test_callback(server):
 
     def post_callback():
         return {
-            "code": 201,
+            "status": 201,
             "type": "response",
             "body": non_ascii_str,
             "headers": [
@@ -320,32 +318,30 @@ def test_callback(server):
     server.response["callback"] = get_callback
     info = request(server.get_url())
     assert info.headers["method"] == "get"
-    assert info.read() == b"Hello"
+    assert info.data == b"Hello"
 
     server.response["post.callback"] = post_callback
     info = request(server.get_url(), b"key=val")
     assert info.headers["method"] == "post"
     assert info.headers["set-cookie"] == "foo=bar"
-    assert info.read() == non_ascii_str.encode("utf-8")
+    assert info.data == non_ascii_str.encode("utf-8")
     assert info.status == 201
 
 
 def test_response_data_iterable(server):
     server.response["data"] = iter(["foo", "bar"])
     res = request(server.get_url())
-    assert res.read() == b"foo"
+    assert res.data == b"foo"
     res = request(server.get_url())
-    assert res.read() == b"bar"
-    with pytest.raises(HTTPError) as ex:
-        request(server.get_url())
-    assert ex.value.status == 503
+    assert res.data == b"bar"
+    res = request(server.get_url())
+    assert res.status == 503
 
 
 def test_response_data_invalid_type(server):
     server.response["data"] = 1
-    with pytest.raises(HTTPError) as ex:
-        request(server.get_url())
-    assert ex.value.status == 500
+    res = request(server.get_url())
+    assert res.status == 500
 
 
 def test_stop_not_started_server():
@@ -361,3 +357,13 @@ def test_start_request_stop_same_port():
             request(server.get_url())
         finally:
             server.stop()
+
+
+def test_file_uploading(server):
+    request(
+        server.get_url(),
+        fields={
+            "image": ("emoji.png", b"zzz"),
+        },
+    )
+    assert server.request["files"]["image"][0]["name"] == "image"
