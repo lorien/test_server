@@ -342,7 +342,8 @@ def test_response_data_iterable(server):
 def test_response_data_invalid_type(server):
     server.response["data"] = 1
     res = request(server.get_url())
-    assert res.status == 500
+    assert res.status == 555
+    assert b"must be string or iterable" in res.data
 
 
 def test_stop_not_started_server():
@@ -368,3 +369,45 @@ def test_file_uploading(server):
         },
     )
     assert server.request["files"]["image"][0]["name"] == "image"
+
+
+def test_callback_response_not_dict(server):
+    def callback():
+        return ["foo", "bar"]
+
+    server.response["callback"] = callback
+    res = request(server.get_url())
+    assert res.status == 555
+    assert b"is not a dict" in res.data
+
+
+def test_callback_response_invalid_type(server):
+    def callback():
+        return {
+            "foo": "bar",
+        }
+
+    server.response["callback"] = callback
+    res = request(server.get_url())
+    assert res.status == 555
+    assert b"invalid type key" in res.data
+
+
+def test_callback_response_invalid_key(server):
+    def callback():
+        return {
+            "type": "response",
+            "foo": "bar",
+        }
+
+    server.response["callback"] = callback
+    res = request(server.get_url())
+    assert res.status == 555
+    assert b"contains invalid key" in res.data
+
+
+def test_invalid_response_key(server):
+    server.response["foo"] = "bar"
+    with pytest.raises(TestServerError) as ex:
+        server.get_url()
+    assert "Invalid response key" in str(ex.value)
