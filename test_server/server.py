@@ -7,6 +7,7 @@ import cgi
 from io import BytesIO
 from copy import deepcopy
 import logging
+from typing import Optional, Union, Callable, List
 
 from socketserver import ThreadingMixIn, TCPServer
 from http.server import BaseHTTPRequestHandler
@@ -22,22 +23,22 @@ from test_server.error import (
     NoResponse,
 )
 
-__all__ = ["TestServer", "WaitTimeoutError", "Response"]
+__all__: list = ["TestServer", "WaitTimeoutError", "Response"]
 
-INTERNAL_ERROR_RESPONSE_STATUS = 555
+INTERNAL_ERROR_RESPONSE_STATUS: int = 555
 
 
 class Response(object):
     def __init__(
         self,
-        status=None,
-        data=None,
-        headers=None,
-        cookies=None,
-        callback=None,
-        sleep=None,
-        charset=None,
-    ):
+        status: Optional[int] = None,
+        data: Union[str, bytes, None] = None,
+        headers: Optional[list] = None,
+        cookies: Optional[list] = None,
+        callback: Optional[Callable] = None,
+        sleep: Optional[float] = None,
+        charset: Optional[str] = None,
+    ) -> None:
         self.status = 200 if status is None else status
         self.data = b"" if data is None else data
         self.headers = [] if headers is None else headers
@@ -47,7 +48,7 @@ class Response(object):
         self.charset = "utf-8" if charset is None else charset
 
 
-CLEAN_REQUEST_DATA = {
+CLEAN_REQUEST_DATA: dict = {
     "args": {},
     "args_binary": {},
     "headers": {},
@@ -59,7 +60,7 @@ CLEAN_REQUEST_DATA = {
     "client_ip": None,
     "charset": "utf-8",
 }
-VALID_METHODS = ["get", "post", "put", "delete", "options", "patch"]
+VALID_METHODS: List[str] = ["get", "post", "put", "delete", "options", "patch"]
 
 
 class ThreadingTCPServer(ThreadingMixIn, TCPServer):
@@ -220,8 +221,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
             self.write_response_data(
                 result["status"], result["headers"], result["data"]
             )
-        except Exception as ex:
-            logging.exception("Internal error happend in test server request handler")
+        except Exception as ex:  # pylint: disable=broad-except
+            logging.exception("Unexpected error happend in test server request handler")
             self.write_response_data(
                 INTERNAL_ERROR_RESPONSE_STATUS, [], str(ex).encode("utf-8")
             )
@@ -337,10 +338,10 @@ class TestServer(object):
     def save_request(self, req):
         self._requests.insert(0, req)
 
-    def add_response(self, resp, count=1, method=None):
+    def add_response(self, resp: Response, count=1, method=None):
         assert method is None or isinstance(method, str)
         assert count < 0 or count > 0
-        if method and not method in VALID_METHODS:
+        if method and method not in VALID_METHODS:
             raise TestServerError("Invalid method: %s" % method)
         self._responses[method].insert(
             0,
@@ -361,8 +362,8 @@ class TestServer(object):
                 try:
                     scope = self._responses[None]
                     item = scope[0]
-                except IndexError:
-                    raise NoResponse("No response available")
+                except IndexError as ex:
+                    raise NoResponse("No response available") from ex
             if item["count"] == -1:
                 return item["response"]
             else:

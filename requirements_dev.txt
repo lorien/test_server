@@ -5,3 +5,6 @@ pytest
 pylint
 sphinx
 pytype
+mypy
+types-urllib3
+types-setuptools

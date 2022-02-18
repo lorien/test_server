@@ -20,7 +20,8 @@ check:
 	python setup.py check -s \
 		&& pylint setup.py test_server tests \
 		&& flake8 setup.py test_server tests \
-		&& pytype setup.py test_server tests
+		&& pytype setup.py test_server tests \
+		&& mypy setup.py test_server tests
 
 test:
 	coverage run -m pytest \
