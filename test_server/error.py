@@ -1,4 +1,10 @@
-__all__ = ["TestServerError", "WaitTimeoutError", "InternalError"]
+__all__ = [
+    "TestServerError",
+    "WaitTimeoutError",
+    "InternalError",
+    "RequestNotProcessed",
+    "NoResponse",
+]
 
 
 class TestServerError(Exception):
@@ -10,4 +16,12 @@ class WaitTimeoutError(TestServerError):
 
 
 class InternalError(TestServerError):
+    pass
+
+
+class RequestNotProcessed(TestServerError):
+    pass
+
+
+class NoResponse(TestServerError):
     pass

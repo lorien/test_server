@@ -8,7 +8,13 @@ from urllib3 import PoolManager
 from urllib3.util.retry import Retry
 import pytest
 
-from test_server import TestServer, WaitTimeoutError, TestServerError
+from test_server import (
+    TestServer,
+    WaitTimeoutError,
+    TestServerError,
+    Response,
+    RequestNotProcessed,
+)
 import test_server
 
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
@@ -40,62 +46,58 @@ def request(url, data=None, method=None, headers=None, fields=None):
 
 def test_get(server):
     valid_data = b"zorro"
-    server.response["data"] = valid_data
+    server.add_response(Response(data=valid_data))
     res = request(server.get_url())
     assert res.data == valid_data
 
 
 def test_non_utf_request_data(server):
-    server.request["charset"] = "cp1251"
-    server.response["data"] = "abc"
+    server.add_response(Response(data="abc"))
     res = request(url=server.get_url(), data=u"конь".encode("cp1251"))
     assert res.data == b"abc"
-    assert server.request["data"] == u"конь".encode("cp1251")
+    assert server.get_request()["data"] == u"конь".encode("cp1251")
 
 
 def test_request_client_ip(server):
+    server.add_response(Response())
     request(server.get_url())
-    assert server.address == server.request["client_ip"]
+    assert server.address == server.get_request()["client_ip"]
 
 
 def test_path(server):
+    server.add_response(Response())
     request(server.get_url("/foo?bar=1"))
-    assert server.request["path"] == "/foo"
-    assert server.request["args"]["bar"] == "1"
+    assert server.get_request()["path"] == "/foo"
+    assert server.get_request()["args"]["bar"] == "1"
 
 
 def test_post(server):
-    server.response["post.data"] = b"resp-data"
-    data = request(server.get_url(), b"req-data").data
-    assert data == b"resp-data"
-    assert server.request["data"] == b"req-data"
+    server.add_response(Response(data="abc"), method="post")
+    res = request(server.get_url(), b"req-data")
+    assert res.data == b"abc"
+    assert server.get_request()["data"] == b"req-data"
 
 
 def test_response_once_get(server):
-    server.response["data"] = b"base"
+    server.add_response(Response(data="base"), count=2)
     assert request(server.get_url()).data == b"base"
-    server.response_once["data"] = b"tmp"
+    server.add_response(Response(data="tmp"))
     assert request(server.get_url()).data == b"tmp"
     assert request(server.get_url()).data == b"base"
 
 
 def test_response_once_specific_method(server):
-    server.response_once["data"] = b"foo"
-    server.response_once["get.data"] = b"bar"
+    server.add_response(Response(data="bar"), method="get")
+    server.add_response(Response(data="foo"))
     assert request(server.get_url()).data == b"bar"
 
 
-def test_get_param_unconfigured(server):
-    with pytest.raises(TestServerError):
-        server.get_param("FOOBAR")
-
-
 def test_response_once_headers(server):
-    server.response["headers"] = [("foo", "bar")]
+    server.add_response(Response(headers=[("foo", "bar")]), count=2)
     info = request(server.get_url())
     assert info.headers["foo"] == "bar"
 
-    server.response_once["headers"] = [("baz", "gaz")]
+    server.add_response(Response(headers=[("baz", "gaz")]))
     info = request(server.get_url())
     assert info.headers["baz"] == "gaz"
     assert "foo" not in info.headers
@@ -106,18 +108,21 @@ def test_response_once_headers(server):
 
 
 def test_request_headers(server):
+    server.add_response(Response())
     request(server.get_url(), headers={"Foo": "Bar"})
-    assert server.request["headers"]["foo"] == "Bar"
+    assert server.get_request()["headers"]["foo"] == "Bar"
 
 
 def test_response_once_reset_headers(server):
-    server.response_once["headers"] = [("foo", "bar")]
+    server.add_response(Response(headers=[("foo", "bar")]))
     server.reset()
-    info = request(server.get_url())
-    assert "foo" not in info.headers
+    res = request(server.get_url())
+    assert res.status == 555
+    assert b"No response" in res.data
 
 
 def test_method_sleep(server):
+    server.add_response(Response())
     delay = 0.3
 
     start = time.time()
@@ -125,7 +130,7 @@ def test_method_sleep(server):
     elapsed = time.time() - start
     assert elapsed <= delay
 
-    server.response["sleep"] = delay
+    server.add_response(Response(sleep=delay))
     start = time.time()
     request(server.get_url())
     elapsed = time.time() - start
@@ -133,9 +138,10 @@ def test_method_sleep(server):
 
 
 def test_response_once_code(server):
+    server.add_response(Response(), count=2)
     res = request(server.get_url())
     assert res.status == 200
-    server.response_once["status"] = 403
+    server.add_response(Response(status=403))
     res = request(server.get_url())
     assert res.status == 403
     res = request(server.get_url())
@@ -153,12 +159,13 @@ def test_request_done_after_start(server):
 
 def test_request_done(server):
     assert not server.request_is_done()
+    server.add_response(Response())
     request(server.get_url())
     assert server.request_is_done()
 
 
 def test_wait_request(server):
-    server.response["data"] = b"foo"
+    server.add_response(Response(data=b"foo"))
 
     def worker():
         time.sleep(1)
@@ -169,22 +176,21 @@ def test_wait_request(server):
     with pytest.raises(WaitTimeoutError):
         server.wait_request(0.5)
     server.wait_request(2)
-    # res = result.get()
-    # assert res == b'foo'
     th.join()
 
 
 def test_request_cookies(server):
+    server.add_response(Response())
     request(url=server.get_url(), headers={"Cookie": "foo=bar"})
-    assert server.request["cookies"]["foo"]["value"] == "bar"
+    assert server.get_request()["cookies"]["foo"]["value"] == "bar"
 
 
 def test_response_once_cookies(server):
-    server.response["cookies"] = [("foo", "bar")]
+    server.add_response(Response(cookies=[("foo", "bar")]), count=2)
     info = request(server.get_url())
     assert "foo=bar" in info.headers["Set-Cookie"]
 
-    server.response_once["cookies"] = [("baz", "gaz")]
+    server.add_response(Response(cookies=[("baz", "gaz")]))
     info = request(server.get_url())
     assert "foo=bar" not in info.headers["Set-Cookie"]
     assert "baz=gaz" in info.headers["Set-Cookie"]
@@ -195,62 +201,56 @@ def test_response_once_cookies(server):
 
 
 def test_default_header_content_type(server):
+    server.add_response(Response())
     info = request(server.get_url())
     assert info.headers["content-type"] == "text/html; charset=utf-8"
 
 
-# def test_non_utf_request_charset(server):
-#    #server.request['charset'] = 'cp1251'
-#    server.response['data'] = 'abc'
-#    req = Request(
-#        url=server.get_url() + quote(u'?who=конь'.encode('cp1251'), safe='?=')
-#    )
-#    assert request(req).data == b'abc'
-#    assert server.request['args']['who'] == u'конь'.encode('cp1251')
-
-
 def test_custom_header_content_type(server):
-    server.response["headers"] = (("Content-Type", "text/html; charset=koi8-r"),)
+    server.add_response(
+        Response(headers=[("Content-Type", "text/html; charset=koi8-r")])
+    )
     info = request(server.get_url())
     assert info.headers["content-type"] == "text/html; charset=koi8-r"
 
 
 def test_default_header_server(server):
+    server.add_response(Response())
     info = request(server.get_url())
     assert info.headers["server"] == ("TestServer/%s" % test_server.__version__)
 
 
 def test_custom_header_server(server):
-    server.response["headers"] = (("Server", "Google"),)
+    server.add_response(Response(headers=[("Server", "Google")]))
     info = request(server.get_url())
     assert info.headers["server"] == "Google"
 
 
 def test_options_method(server):
-    server.response["data"] = b"abc"
+    server.add_response(Response(data=b"abc"))
     res = request(url=server.get_url(), method="OPTIONS")
-    assert server.request["method"] == "OPTIONS"
+    assert server.get_request()["method"] == "OPTIONS"
     assert res.data == b"abc"
 
 
 def test_multiple_start_stop_cycles():
     for cnt in range(30):
-        server2 = TestServer(port=EXTRA_PORT + cnt)
-        server2.start()
+        server = TestServer(port=EXTRA_PORT + cnt)
+        server.start()
         try:
-            server2.response["data"] = b"zorro"
+            server.add_response(Response(data=b"zorro"), count=10)
             for _ in range(10):
-                data = request(server2.get_url()).data
-                assert data == b"zorro"
+                res = request(server.get_url())
+                assert res.data == b"zorro"
         finally:
-            server2.stop()
+            server.stop()
 
 
 def test_specific_port():
     server = TestServer(address="localhost", port=EXTRA_PORT)
     try:
         server.start()
-        server.response["data"] = b"abc"
+        server.add_response(Response(data=b"abc"))
         data = request(server.get_url()).data
         assert data == b"abc"
     finally:
@@ -258,14 +258,18 @@ def test_specific_port():
 
 
 def test_null_bytes(server):
-    server.response_once["status"] = 302
-    server.response_once["headers"] = [
-        ("Location", server.get_url().rstrip("/") + "/\x00/")
-    ]
-    server.response["data"] = "zzz"
+    server.add_response(Response(data=b"zzz"))
+    server.add_response(
+        Response(
+            status=302,
+            headers=[
+                ("Location", server.get_url().rstrip("/") + "/\x00/"),
+            ],
+        )
+    )
     res = request(server.get_url())
     assert res.data == b"zzz"
-    assert unquote(server.request["path"]) == "/\x00/"
+    assert unquote(server.get_request()["path"]) == "/\x00/"
 
 
 # def send_get_request(host, port, path):
@@ -285,10 +289,11 @@ def test_null_bytes(server):
 
 
 def test_utf_header(server):
-    server.response["headers"] = [
-        ("Location", (server.get_url() + u"фыва").encode("utf-8"))
-    ]
+    server.add_response(
+        Response(headers=[("Location", (server.get_url() + u"фыва").encode("utf-8"))])
+    )
     request(server.get_url())
+    # WTF ???
 
 
 def test_callback(server):
@@ -305,8 +310,8 @@ def test_callback(server):
 
     def post_callback():
         return {
-            "status": 201,
             "type": "response",
+            "status": 201,
             "body": non_ascii_str,
             "headers": [
                 ("method", "post"),
@@ -316,12 +321,13 @@ def test_callback(server):
             ],
         }
 
-    server.response["callback"] = get_callback
+    server.add_response(Response(callback=get_callback))
+    server.add_response(Response(callback=post_callback), method="post")
+
     info = request(server.get_url())
     assert info.headers["method"] == "get"
     assert info.data == b"Hello"
 
-    server.response["post.callback"] = post_callback
     info = request(server.get_url(), b"key=val")
     assert info.headers["method"] == "post"
     assert info.headers["set-cookie"] == "foo=bar"
@@ -329,21 +335,11 @@ def test_callback(server):
     assert info.status == 201
 
 
-def test_response_data_iterable(server):
-    server.response["data"] = iter(["foo", "bar"])
-    res = request(server.get_url())
-    assert res.data == b"foo"
-    res = request(server.get_url())
-    assert res.data == b"bar"
-    res = request(server.get_url())
-    assert res.status == 503
-
-
 def test_response_data_invalid_type(server):
-    server.response["data"] = 1
+    server.add_response(Response(data=1))
     res = request(server.get_url())
     assert res.status == 555
-    assert b"must be string or iterable" in res.data
+    assert b"must be string or bytes" in res.data
 
 
 def test_stop_not_started_server():
@@ -356,26 +352,28 @@ def test_start_request_stop_same_port():
     for _ in range(10):
         try:
             server.start()
+            server.add_response(Response())
             request(server.get_url())
         finally:
             server.stop()
 
 
 def test_file_uploading(server):
+    server.add_response(Response())
     request(
         server.get_url(),
         fields={
             "image": ("emoji.png", b"zzz"),
         },
     )
-    assert server.request["files"]["image"][0]["name"] == "image"
+    assert server.get_request()["files"]["image"][0]["name"] == "image"
 
 
 def test_callback_response_not_dict(server):
     def callback():
         return ["foo", "bar"]
 
-    server.response["callback"] = callback
+    server.add_response(Response(callback=callback))
     res = request(server.get_url())
     assert res.status == 555
     assert b"is not a dict" in res.data
@@ -387,7 +385,7 @@ def test_callback_response_invalid_type(server):
             "foo": "bar",
         }
 
-    server.response["callback"] = callback
+    server.add_response(Response(callback=callback))
     res = request(server.get_url())
     assert res.status == 555
     assert b"invalid type key" in res.data
@@ -400,14 +398,47 @@ def test_callback_response_invalid_key(server):
             "foo": "bar",
         }
 
-    server.response["callback"] = callback
+    server.add_response(Response(callback=callback))
     res = request(server.get_url())
     assert res.status == 555
     assert b"contains invalid key" in res.data
 
 
 def test_invalid_response_key(server):
-    server.response["foo"] = "bar"
+    with pytest.raises(TypeError) as ex:
+        Response(foo="bar")
+    assert "unexpected keyword argument" in str(ex.value)
+
+
+def test_get_request_no_request(server):
+    with pytest.raises(RequestNotProcessed):
+        server.get_request()
+
+
+def test_add_response_invalid_method(server):
     with pytest.raises(TestServerError) as ex:
-        server.get_url()
-    assert "Invalid response key" in str(ex.value)
+        server.add_response(Response(), method="foo")
+    assert "Invalid method" in str(ex.value)
+
+
+def test_add_response_count_minus_one(server):
+    server.add_response(Response(), count=-1)
+    for _ in range(3):
+        assert 200 == request(server.get_url()).status
+
+
+def test_add_response_count_one_default(server):
+    server.add_response(Response())
+    assert 200 == request(server.get_url()).status
+    assert b"No response" in request(server.get_url()).data
+
+    server.add_response(Response(), count=1)
+    assert 200 == request(server.get_url()).status
+    assert b"No response" in request(server.get_url()).data
+
+
+def test_add_response_count_two(server):
+    server.add_response(Response(), count=2)
+    assert 200 == request(server.get_url()).status
+    assert 200 == request(server.get_url()).status
+    assert b"No response" in request(server.get_url()).data

@@ -1,7 +1,7 @@
 # pylint: disable=consider-using-f-string
 from pprint import pprint  # pylint: disable=unused-import
 import time
-from collections.abc import Iterable
+from collections import defaultdict
 from threading import Thread, Event
 import cgi
 from io import BytesIO
@@ -14,20 +14,39 @@ from http.cookies import SimpleCookie
 from urllib.parse import urljoin, parse_qsl
 
 from test_server.version import TEST_SERVER_VERSION
-from test_server.error import TestServerError, WaitTimeoutError, InternalError
+from test_server.error import (
+    TestServerError,
+    WaitTimeoutError,
+    InternalError,
+    RequestNotProcessed,
+    NoResponse,
+)
 
-__all__ = ("TestServer", "WaitTimeoutError")
+__all__ = ["TestServer", "WaitTimeoutError", "Response"]
 
 INTERNAL_ERROR_RESPONSE_STATUS = 555
-CLEAN_RESPONSE_DATA = {
-    "status": 200,
-    "data": "",
-    "headers": [],
-    "cookies": [],
-    "callback": None,
-    "sleep": None,
-    "charset": "utf-8",
-}
+
+
+class Response(object):
+    def __init__(
+        self,
+        status=None,
+        data=None,
+        headers=None,
+        cookies=None,
+        callback=None,
+        sleep=None,
+        charset=None,
+    ):
+        self.status = 200 if status is None else status
+        self.data = b"" if data is None else data
+        self.headers = [] if headers is None else headers
+        self.cookies = [] if cookies is None else cookies
+        self.callback = callback
+        self.sleep = sleep
+        self.charset = "utf-8" if charset is None else charset
+
+
 CLEAN_REQUEST_DATA = {
     "args": {},
     "args_binary": {},
@@ -38,10 +57,8 @@ CLEAN_REQUEST_DATA = {
     "data": None,
     "files": {},
     "client_ip": None,
-    "done": False,
     "charset": "utf-8",
 }
-VALID_RESPONSE_KEYS = list(CLEAN_RESPONSE_DATA.keys())
 VALID_METHODS = ["get", "post", "put", "delete", "options", "patch"]
 
 
@@ -119,18 +136,18 @@ class TestServerHandler(BaseHTTPRequestHandler):
         try:
             test_srv = self.server.test_server  # pytype: disable=attribute-error
             method = self.command.lower()
-            sleep = test_srv.get_param("sleep", method)
-            if sleep:
-                time.sleep(sleep)
-            test_srv.request = self._collect_request_data(method)
+            resp = test_srv.get_response(method)
+            if resp.sleep:
+                time.sleep(resp.sleep)
+            test_srv.save_request(self._collect_request_data(method))
 
-            response = {
+            result = {
                 "status": 200,
                 "headers": [],
                 "data": b"",
             }
 
-            callback = test_srv.get_param("callback", method)
+            callback = resp.callback
             if callback:
                 cb_res = callback()
                 if not isinstance(cb_res, dict):
@@ -142,74 +159,66 @@ class TestServerHandler(BaseHTTPRequestHandler):
                                 "Callback response contains invalid key: %s" % key
                             )
                     if "status" in cb_res:
-                        response["status"] = cb_res["status"]
+                        result["status"] = cb_res["status"]
                     if "headers" in cb_res:
                         for key, val in cb_res["headers"]:
-                            response["headers"].append((key, val))
+                            result["headers"].append((key, val))
                     if "cookies" in cb_res:
                         for key, val in cb_res["cookies"]:
-                            response["headers"].append(
+                            result["headers"].append(
                                 ("Set-Cookie", "%s=%s" % (key, val))
                             )
                     if "body" in cb_res:
                         if isinstance(cb_res["body"], str):
                             # TODO: do not use hardcoded "utf-8"
-                            response["data"] = cb_res["body"].encode("utf-8")
+                            result["data"] = cb_res["body"].encode("utf-8")
                         elif isinstance(cb_res["body"], bytes):
-                            response["data"] = cb_res["body"]
+                            result["data"] = cb_res["body"]
                 else:
                     raise InternalError(
                         "Callback response has invalid type key: %s"
                         % cb_res.get("type", "NA")
                     )
             else:
-                response["status"] = test_srv.get_param("status", method)
+                result["status"] = resp.status
 
-                for key, val in test_srv.get_param("cookies", method):
+                for key, val in resp.cookies:
                     # Set-Cookie: name=newvalue; expires=date;
                     # path=/; domain=.example.org.
-                    response["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
+                    result["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
 
-                for key, value in test_srv.get_param("headers", method):
-                    response["headers"].append((key, value))
+                for key, value in resp.headers:
+                    result["headers"].append((key, value))
 
                 port = self.server.test_server.port  # pytype: disable=attribute-error
-                response["headers"].append(("Listen-Port", str(port)))
+                result["headers"].append(("Listen-Port", str(port)))
 
-                data = test_srv.get_param("data", method)
-                charset = test_srv.get_param("charset", method)
+                data = resp.data
+                charset = resp.charset
                 if isinstance(data, str):
-                    response["data"] = data.encode(charset)
+                    result["data"] = data.encode(charset)
                 elif isinstance(data, bytes):
-                    response["data"] = data
-                elif isinstance(data, Iterable):
-                    try:
-                        next_data = next(data)
-                        if isinstance(next_data, str):
-                            next_data = next_data.encode(charset)
-                        response["data"] = next_data
-                    except StopIteration:
-                        response["status"] = 503
+                    result["data"] = data
                 else:
                     raise InternalError(
-                        'Response parameter "data" must be string or iterable'
+                        'Response parameter "data" must be string or bytes'
                     )
 
-                header_keys = [x[0].lower() for x in response["headers"]]
+                header_keys = [x[0].lower() for x in result["headers"]]
                 if "content-type" not in header_keys:
-                    response["headers"].append(
+                    result["headers"].append(
                         (
                             "Content-Type",
                             "text/html; charset=%s" % charset,
                         )
                     )
                 if "server" not in header_keys:
-                    response["headers"].append(
+                    result["headers"].append(
                         ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
                     )
 
             self.write_response_data(
-                response["status"], response["headers"], response["data"]
+                result["status"], result["headers"], result["data"]
             )
         except Exception as ex:
             logging.exception("Internal error happend in test server request handler")
@@ -217,7 +226,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 INTERNAL_ERROR_RESPONSE_STATUS, [], str(ex).encode("utf-8")
             )
         finally:
-            test_srv.request["done"] = True
+            test_srv.num_req_processed += 1
 
     def write_response_data(self, status, headers, data):
         self.send_response(status)
@@ -245,9 +254,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
 class TestServer(object):
     def __init__(self, address="127.0.0.1", port=0):
         self.server_started = Event()
-        self.request = {}
-        self.response = {}
-        self.response_once = {}
+        self._requests = []
+        self._responses = defaultdict(list)
         self.port = port
         self.address = address
         self._handler = None
@@ -260,13 +268,13 @@ class TestServer(object):
                 "port": self.port,
             }
         )
+        self.num_req_processed = 0
         self.reset()
 
     def reset(self):
-        self.request.clear()
-        self.response.clear()
-        self.response.update(deepcopy(CLEAN_RESPONSE_DATA))
-        self.response_once.clear()
+        self.num_req_processed = 0
+        self._requests.clear()
+        self._responses.clear()
 
     def thread_server(self):
         """Ask HTTP server start processing requests
@@ -303,7 +311,6 @@ class TestServer(object):
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""
         # Yeah, stupid, just tryng to fail my Grab tests ASAP
-        self.validate_response_keys()
         if port is None:
             port = self.port
         return urljoin("http://%s:%d" % (self.address, port), path)
@@ -312,40 +319,54 @@ class TestServer(object):
         """Stupid implementation that eats CPU."""
         start = time.time()
         while True:
-            if self.request_is_done():
+            if self.num_req_processed:
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:
                 raise WaitTimeoutError("No request processed in %d seconds" % timeout)
 
-    def get_param(self, key, method="get"):
-        method_key = "%s.%s" % (method, key)
-        if method_key in self.response_once:
-            return self.response_once.pop(method_key)
-        elif key in self.response_once:
-            return self.response_once.pop(key)
-        elif method_key in self.response:
-            return self.response[method_key]
-        elif key in self.response:
-            return self.response[key]
-        else:
-            raise TestServerError("Response parameter {} is not configured".format(key))
-
-    def validate_response_keys(self):
-        for scope_name, scope in [
-            ("response", self.response),
-            ("response_once", self.response_once),
-        ]:
-            for key_item in scope:
-                if "." in key_item:
-                    method, key = key_item.split(".", 1)
-                else:
-                    method = None
-                    key = key_item
-                if (
-                    method and method not in VALID_METHODS
-                ) or key not in VALID_RESPONSE_KEYS:
-                    raise TestServerError("Invalid %s key: %s" % (scope_name, key_item))
-
     def request_is_done(self):
-        return self.request and self.request["done"]
+        return self.num_req_processed
+
+    def get_request(self):
+        try:
+            return self._requests[0]
+        except IndexError as ex:
+            raise RequestNotProcessed("Request has not been processed") from ex
+
+    def save_request(self, req):
+        self._requests.insert(0, req)
+
+    def add_response(self, resp, count=1, method=None):
+        assert method is None or isinstance(method, str)
+        assert count < 0 or count > 0
+        if method and not method in VALID_METHODS:
+            raise TestServerError("Invalid method: %s" % method)
+        self._responses[method].insert(
+            0,
+            {
+                "count": count,
+                "response": resp,
+            },
+        )
+
+    def get_response(self, method):
+        while True:
+            item = None
+            scope = None
+            try:
+                scope = self._responses[method]
+                item = scope[0]
+            except IndexError:
+                try:
+                    scope = self._responses[None]
+                    item = scope[0]
+                except IndexError:
+                    raise NoResponse("No response available")
+            if item["count"] == -1:
+                return item["response"]
+            else:
+                item["count"] -= 1
+                if item["count"] < 1:
+                    scope.pop(0)
+                return item["response"]
