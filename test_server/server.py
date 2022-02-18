@@ -19,7 +19,7 @@ from test_server.error import TestServerError, WaitTimeoutError, InternalError
 __all__ = ("TestServer", "WaitTimeoutError")
 
 INTERNAL_ERROR_RESPONSE_STATUS = 555
-CLEAN_RESPONSE = {
+CLEAN_RESPONSE_DATA = {
     "status": 200,
     "data": "",
     "headers": [],
@@ -28,7 +28,20 @@ CLEAN_RESPONSE = {
     "sleep": None,
     "charset": "utf-8",
 }
-VALID_RESPONSE_KEYS = list(CLEAN_RESPONSE.keys())
+CLEAN_REQUEST_DATA = {
+    "args": {},
+    "args_binary": {},
+    "headers": {},
+    "cookies": None,
+    "path": None,
+    "method": None,
+    "data": None,
+    "files": {},
+    "client_ip": None,
+    "done": False,
+    "charset": "utf-8",
+}
+VALID_RESPONSE_KEYS = list(CLEAN_RESPONSE_DATA.keys())
 VALID_METHODS = ["get", "post", "put", "delete", "options", "patch"]
 
 
@@ -43,74 +56,73 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 
 
 class TestServerHandler(BaseHTTPRequestHandler):
+    def _collect_request_data(self, method):
+        request = deepcopy(CLEAN_REQUEST_DATA)
+        request["client_ip"] = self.client_address[0]
+        request["args"] = {}
+        try:
+            qs = self.path.split("?")[1]
+        except IndexError:
+            qs = ""
+        params = dict(parse_qsl(qs))
+        for key, val in params.items():
+            request["args"][key] = val
+        #    #request['args_binary'][key] = request.params[key]
+        for key, val in self.headers.items():
+            request["headers"][key.lower()] = val
+
+        path = self.path
+        # WTF is this?
+        # if isinstance(path, bytes):
+        #    path = path.decode("utf-8")
+        request["path"] = path.split("?")[0]
+        request["method"] = method.upper()
+
+        cookies = {}
+        items = SimpleCookie(self.headers["Cookie"])
+        for item_key, item in items.items():
+            cookies[item_key] = {}
+            cookies[item_key]["name"] = item_key
+            cookies[item_key]["value"] = item.value
+        request["cookies"] = cookies
+
+        clen = int(self.headers["Content-Length"] or "0")
+        request_data = self.rfile.read(clen)
+        request["data"] = request_data
+
+        ctype = self.headers["Content-Type"]
+        if ctype and ctype.split(";")[0] == "multipart/form-data":
+            form = cgi.FieldStorage(
+                fp=BytesIO(request_data),
+                headers=self.headers,
+                environ={
+                    "REQUEST_METHOD": "POST",
+                    "CONTENT_TYPE": self.headers["Content-Type"],
+                },
+            )
+            for field_key in form.keys():  # pylint: disable=consider-using-dict-items
+                box = form[field_key]
+                for field in box if isinstance(box, list) else [box]:
+                    request["files"].setdefault(field_key, []).append(
+                        {
+                            "name": field_key,
+                            # "raw_filename": None,
+                            "content_type": field.type,
+                            "filename": field.filename,
+                            "content": field.file.read(),
+                        }
+                    )
+
+        return request
+
     def _request_handler(self):
         try:
             test_srv = self.server.test_server  # pytype: disable=attribute-error
             method = self.command.lower()
-
             sleep = test_srv.get_param("sleep", method)
             if sleep:
                 time.sleep(sleep)
-            test_srv.request["client_ip"] = self.client_address[0]
-            test_srv.request["args"] = {}
-            # test_srv.request['args_binary'] = {}
-            try:
-                qs = self.path.split("?")[1]
-            except IndexError:
-                qs = ""
-            params = dict(parse_qsl(qs))
-            for key, val in params.items():
-                test_srv.request["args"][key] = val
-            #    #test_srv.request['args_binary'][key] = request.params[key]
-            for key, val in self.headers.items():
-                test_srv.request["headers"][key.lower()] = val
-
-            path = self.path
-            # WTF is this?
-            # if isinstance(path, bytes):
-            #    path = path.decode("utf-8")
-            test_srv.request["path"] = path.split("?")[0]
-            test_srv.request["method"] = method.upper()
-
-            cookies = {}
-            items = SimpleCookie(self.headers["Cookie"])
-            for item_key, item in items.items():
-                cookies[item_key] = {}
-                cookies[item_key]["name"] = item_key
-                cookies[item_key]["value"] = item.value
-            test_srv.request["cookies"] = cookies
-
-            clen = int(self.headers["Content-Length"] or "0")
-            request_data = self.rfile.read(clen)
-            test_srv.request["data"] = request_data
-
-            # ctype, pdict = cgi.parse_header(self.headers["Content-Type"])
-            ctype = self.headers["Content-Type"]
-            if ctype and ctype.split(";")[0] == "multipart/form-data":
-                # pdict["boundary"] = bytes(pdict["boundary"], "utf-8")
-                # pdict["CONTENT-LENGTH"] = int(self.headers["Content-Length"])
-                form = cgi.FieldStorage(
-                    fp=BytesIO(request_data),
-                    headers=self.headers,
-                    environ={
-                        "REQUEST_METHOD": "POST",
-                        "CONTENT_TYPE": self.headers["Content-Type"],
-                    },
-                )
-                for (
-                    field_key
-                ) in form.keys():  # pylint: disable=consider-using-dict-items
-                    box = form[field_key]
-                    for field in box if isinstance(box, list) else [box]:
-                        test_srv.request["files"].setdefault(field_key, []).append(
-                            {
-                                "name": field_key,
-                                # "raw_filename": None,
-                                "content_type": field.type,
-                                "filename": field.filename,
-                                "content": field.file.read(),
-                            }
-                        )
+            test_srv.request = self._collect_request_data(method)
 
             response = {
                 "status": 200,
@@ -252,23 +264,8 @@ class TestServer(object):
 
     def reset(self):
         self.request.clear()
-        self.request.update(
-            {
-                "args": {},
-                "args_binary": {},
-                "headers": {},
-                "cookies": None,
-                "path": None,
-                "method": None,
-                "data": None,
-                "files": {},
-                "client_ip": None,
-                "done": False,
-                "charset": "utf-8",
-            }
-        )
         self.response.clear()
-        self.response.update(deepcopy(CLEAN_RESPONSE))
+        self.response.update(deepcopy(CLEAN_RESPONSE_DATA))
         self.response_once.clear()
 
     def thread_server(self):
@@ -315,7 +312,7 @@ class TestServer(object):
         """Stupid implementation that eats CPU."""
         start = time.time()
         while True:
-            if self.request["done"]:
+            if self.request_is_done():
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:
@@ -349,3 +346,6 @@ class TestServer(object):
                     method and method not in VALID_METHODS
                 ) or key not in VALID_RESPONSE_KEYS:
                     raise TestServerError("Invalid %s key: %s" % (scope_name, key_item))
+
+    def request_is_done(self):
+        return self.request and self.request["done"]

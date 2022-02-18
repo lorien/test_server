@@ -146,15 +146,15 @@ def test_request_done_after_start(server):
     server = TestServer(port=EXTRA_PORT)
     try:
         server.start()
-        assert server.request["done"] is False
+        assert not server.request_is_done()
     finally:
         server.stop()
 
 
 def test_request_done(server):
-    assert server.request["done"] is False
+    assert not server.request_is_done()
     request(server.get_url())
-    assert server.request["done"] is True
+    assert server.request_is_done()
 
 
 def test_wait_request(server):
