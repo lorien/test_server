@@ -8,7 +8,6 @@ venv:
 deps:
 	.env/bin/pip install -r requirements_dev.txt
 
-
 clean:
 	find -name '*.pyc' -delete
 	find -name '*.swp' -delete
