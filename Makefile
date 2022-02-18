@@ -1,4 +1,4 @@
-.PHONY: build venv deps clean upload check test
+.PHONY: build venv deps clean release check test
 
 build: venv deps
 
@@ -13,8 +13,8 @@ clean:
 	find -name '*.swp' -delete
 	find -name __pycache__ -delete
 
-upload:
-	git push --tags; python setup.py sdist upload
+release:
+	git push; git push --tags; rm dist/*; python3 setup.py clean sdist; twine upload dist/*
 
 check:
 	python setup.py check -s \
