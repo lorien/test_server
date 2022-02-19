@@ -30,45 +30,45 @@ INTERNAL_ERROR_RESPONSE_STATUS: int = 555
 class Response(object):
     def __init__(
         self,
-        status: Optional[int] = None,
+        callback: Optional[Callable] = None,
+        charset: Optional[str] = None,
+        cookies: Optional[list] = None,
         data: Union[str, bytes, None] = None,
         headers: Optional[list] = None,
-        cookies: Optional[list] = None,
-        callback: Optional[Callable] = None,
         sleep: Optional[float] = None,
-        charset: Optional[str] = None,
+        status: Optional[int] = None,
     ) -> None:
-        self.status = 200 if status is None else status
+        self.callback = callback
+        self.charset = "utf-8" if charset is None else charset
+        self.cookies = [] if cookies is None else cookies
         self.data = b"" if data is None else data
         self.headers = [] if headers is None else headers
-        self.cookies = [] if cookies is None else cookies
-        self.callback = callback
         self.sleep = sleep
-        self.charset = "utf-8" if charset is None else charset
+        self.status = 200 if status is None else status
 
 
 class Request(object):
     def __init__(
         self,
         args: Optional[dict] = None,
-        headers: Optional[dict] = None,
+        charset: Optional[str] = None,
+        client_ip: Optional[str] = None,
         cookies: Optional[dict] = None,
-        path: Optional[str] = None,
-        method: Optional[str] = None,
         data: Optional[bytes] = None,
         files: Optional[dict] = None,
-        client_ip: Optional[str] = None,
-        charset: Optional[str] = None,
+        headers: Optional[dict] = None,
+        method: Optional[str] = None,
+        path: Optional[str] = None,
     ):
         self.args = {} if args is None else args
-        self.headers = {} if headers is None else headers
+        self.charset = "utf-8" if charset is None else charset
+        self.client_ip = {} if client_ip is None else client_ip
         self.cookies = {} if cookies is None else cookies
-        self.path = None if path is None else path
-        self.method = None if method is None else method
         self.data = None if data is None else data
         self.files = {} if files is None else files
-        self.client_ip = {} if client_ip is None else client_ip
-        self.charset = "utf-8" if charset is None else charset
+        self.headers = {} if headers is None else headers
+        self.method = None if method is None else method
+        self.path = None if path is None else path
 
 
 VALID_METHODS: List[str] = ["get", "post", "put", "delete", "options", "patch"]
