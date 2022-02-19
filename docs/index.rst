@@ -1,8 +1,6 @@
 test_server documentation
 =========================
 
-.. module:: test_server.server
-
 Package test_servers helps you to test HTTP clients:
 
 * see details of HTTP request made by client

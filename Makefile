@@ -1,4 +1,4 @@
-.PHONY: build venv deps clean release check test
+.PHONY: build venv deps clean release check test docs
 
 build: venv deps
 
@@ -26,3 +26,7 @@ check:
 test:
 	coverage run -m pytest \
 		&& coverage report -m
+
+docs:
+	rm -r docs/_build \
+		&& sphinx-build -b html docs docs/_build
