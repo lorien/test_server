@@ -24,11 +24,8 @@ Example:
 .. code:: python
 
     from unittest import TestCase
-    try:
-        from urllib import urlopen
-    except ImportError:
-        from urllib.request import urlopen
-    from test_server import TestServer
+    from urllib.request import urlopen
+    from test_server import TestServer, Response
 
     class UrllibTestCase(TestCase):
         @classmethod
@@ -45,6 +42,6 @@ Example:
 
         def test_get(self):
             token = b'zorro'
-            self.server.response['data'] = token
+            self.server.add_response(Response(data=token))
             data = urlopen(self.server.base_url).read()
             self.assertEqual(data, token)
