@@ -56,27 +56,27 @@ def test_non_utf_request_data(server: TestServer) -> None:
     server.add_response(Response(data="abc"))
     res = request(url=server.get_url(), data=u"конь".encode("cp1251"))
     assert res.data == b"abc"
-    assert server.get_request()["data"] == u"конь".encode("cp1251")
+    assert server.get_request().data == u"конь".encode("cp1251")
 
 
 def test_request_client_ip(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url())
-    assert server.address == server.get_request()["client_ip"]
+    assert server.address == server.get_request().client_ip
 
 
 def test_path(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url("/foo?bar=1"))
-    assert server.get_request()["path"] == "/foo"
-    assert server.get_request()["args"]["bar"] == "1"
+    assert server.get_request().path == "/foo"
+    assert server.get_request().args["bar"] == "1"
 
 
 def test_post(server: TestServer) -> None:
     server.add_response(Response(data="abc"), method="post")
     res = request(server.get_url(), b"req-data")
     assert res.data == b"abc"
-    assert server.get_request()["data"] == b"req-data"
+    assert server.get_request().data == b"req-data"
 
 
 def test_response_once_get(server: TestServer) -> None:
@@ -111,7 +111,7 @@ def test_response_once_headers(server: TestServer) -> None:
 def test_request_headers(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url(), headers={"Foo": "Bar"})
-    assert server.get_request()["headers"]["foo"] == "Bar"
+    assert server.get_request().headers["foo"] == "Bar"
 
 
 def test_response_once_reset_headers(server: TestServer) -> None:
@@ -183,7 +183,7 @@ def test_wait_request(server: TestServer) -> None:
 def test_request_cookies(server: TestServer) -> None:
     server.add_response(Response())
     request(url=server.get_url(), headers={"Cookie": "foo=bar"})
-    assert server.get_request()["cookies"]["foo"]["value"] == "bar"
+    assert server.get_request().cookies["foo"]["value"] == "bar"
 
 
 def test_response_once_cookies(server: TestServer) -> None:
@@ -230,7 +230,7 @@ def test_custom_header_server(server: TestServer) -> None:
 def test_options_method(server: TestServer) -> None:
     server.add_response(Response(data=b"abc"))
     res = request(url=server.get_url(), method="OPTIONS")
-    assert server.get_request()["method"] == "OPTIONS"
+    assert server.get_request().method == "OPTIONS"
     assert res.data == b"abc"
 
 
@@ -270,7 +270,7 @@ def test_null_bytes(server: TestServer) -> None:
     )
     res = request(server.get_url())
     assert res.data == b"zzz"
-    assert unquote(server.get_request()["path"]) == "/\x00/"
+    assert unquote(server.get_request().path) == "/\x00/"
 
 
 # def send_get_request(host, port, path):
@@ -367,7 +367,7 @@ def test_file_uploading(server: TestServer) -> None:
             "image": ("emoji.png", b"zzz"),
         },
     )
-    assert server.get_request()["files"]["image"][0]["name"] == "image"
+    assert server.get_request().files["image"][0]["name"] == "image"
 
 
 def test_callback_response_not_dict(server: TestServer) -> None:

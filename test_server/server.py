@@ -5,7 +5,6 @@ from collections import defaultdict
 from threading import Thread, Event
 import cgi
 from io import BytesIO
-from copy import deepcopy
 import logging
 from typing import Optional, Union, Callable, List
 
@@ -48,18 +47,30 @@ class Response(object):
         self.charset = "utf-8" if charset is None else charset
 
 
-CLEAN_REQUEST_DATA: dict = {
-    "args": {},
-    "args_binary": {},
-    "headers": {},
-    "cookies": None,
-    "path": None,
-    "method": None,
-    "data": None,
-    "files": {},
-    "client_ip": None,
-    "charset": "utf-8",
-}
+class Request(object):
+    def __init__(
+        self,
+        args: Optional[dict] = None,
+        headers: Optional[dict] = None,
+        cookies: Optional[dict] = None,
+        path: Optional[str] = None,
+        method: Optional[str] = None,
+        data: Optional[bytes] = None,
+        files: Optional[dict] = None,
+        client_ip: Optional[str] = None,
+        charset: Optional[str] = None,
+    ):
+        self.args = {} if args is None else args
+        self.headers = {} if headers is None else headers
+        self.cookies = {} if cookies is None else cookies
+        self.path = None if path is None else path
+        self.method = None if method is None else method
+        self.data = None if data is None else data
+        self.files = {} if files is None else files
+        self.client_ip = {} if client_ip is None else client_ip
+        self.charset = "utf-8" if charset is None else charset
+
+
 VALID_METHODS: List[str] = ["get", "post", "put", "delete", "options", "patch"]
 
 
@@ -75,38 +86,35 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 
 class TestServerHandler(BaseHTTPRequestHandler):
     def _collect_request_data(self, method):
-        request = deepcopy(CLEAN_REQUEST_DATA)
-        request["client_ip"] = self.client_address[0]
-        request["args"] = {}
+        request = Request()
+        request.client_ip = self.client_address[0]
         try:
             qs = self.path.split("?")[1]
         except IndexError:
             qs = ""
         params = dict(parse_qsl(qs))
         for key, val in params.items():
-            request["args"][key] = val
-        #    #request['args_binary'][key] = request.params[key]
+            request.args[key] = val
         for key, val in self.headers.items():
-            request["headers"][key.lower()] = val
+            request.headers[key.lower()] = val
 
         path = self.path
         # WTF is this?
         # if isinstance(path, bytes):
         #    path = path.decode("utf-8")
-        request["path"] = path.split("?")[0]
-        request["method"] = method.upper()
+        request.path = path.split("?")[0]
+        request.method = method.upper()
 
-        cookies = {}
         items = SimpleCookie(self.headers["Cookie"])
         for item_key, item in items.items():
-            cookies[item_key] = {}
-            cookies[item_key]["name"] = item_key
-            cookies[item_key]["value"] = item.value
-        request["cookies"] = cookies
+            request.cookies[item_key] = {
+                "name": item_key,
+                "value": item.value,
+            }
 
         clen = int(self.headers["Content-Length"] or "0")
         request_data = self.rfile.read(clen)
-        request["data"] = request_data
+        request.data = request_data
 
         ctype = self.headers["Content-Type"]
         if ctype and ctype.split(";")[0] == "multipart/form-data":
@@ -121,7 +129,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             for field_key in form.keys():  # pylint: disable=consider-using-dict-items
                 box = form[field_key]
                 for field in box if isinstance(box, list) else [box]:
-                    request["files"].setdefault(field_key, []).append(
+                    request.files.setdefault(field_key, []).append(
                         {
                             "name": field_key,
                             # "raw_filename": None,
@@ -140,7 +148,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             resp = test_srv.get_response(method)
             if resp.sleep:
                 time.sleep(resp.sleep)
-            test_srv.save_request(self._collect_request_data(method))
+            test_srv.add_request(self._collect_request_data(method))
 
             result = {
                 "status": 200,
@@ -240,6 +248,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
     def send_response(self, code, message=None):
         """
         Custom method which does not send Server and Date headers
+
+        This method overrides standard method from super class.
         """
         self.log_request(code)
         self.send_response_only(code, message)
@@ -272,12 +282,7 @@ class TestServer(object):
         self.num_req_processed = 0
         self.reset()
 
-    def reset(self):
-        self.num_req_processed = 0
-        self._requests.clear()
-        self._responses.clear()
-
-    def thread_server(self):
+    def _thread_server(self):
         """Ask HTTP server start processing requests
 
         This function is supposed to be run in separate thread.
@@ -288,10 +293,22 @@ class TestServer(object):
         )
         self._server.serve_forever(poll_interval=0.1)
 
+    # ****************
+    # Public Interface
+    # ****************
+
+    def add_request(self, req):
+        self._requests.insert(0, req)
+
+    def reset(self):
+        self.num_req_processed = 0
+        self._requests.clear()
+        self._responses.clear()
+
     def start(self, daemon=True):
         """Start the HTTP server."""
         self._thread = Thread(
-            target=self.thread_server,
+            target=self._thread_server,
         )
         self._thread.daemon = daemon
         self._thread.start()
@@ -334,9 +351,6 @@ class TestServer(object):
             return self._requests[0]
         except IndexError as ex:
             raise RequestNotProcessed("Request has not been processed") from ex
-
-    def save_request(self, req):
-        self._requests.insert(0, req)
 
     def add_response(self, resp: Response, count=1, method=None):
         assert method is None or isinstance(method, str)
