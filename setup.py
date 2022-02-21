@@ -20,7 +20,7 @@ setup(
     license="MIT License",
     # Package files
     packages=["test_server"],
-    install_requires=["urllib3"],
+    install_requires=[],
     # Topics
     classifiers=[
         "Programming Language :: Python",

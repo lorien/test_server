@@ -111,7 +111,7 @@ def test_response_once_headers(server: TestServer) -> None:
 def test_request_headers(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url(), headers={"Foo": "Bar"})
-    assert server.get_request().headers["foo"] == "Bar"
+    assert server.get_request().headers["foo"] == b"Bar"
 
 
 def test_response_once_reset_headers(server: TestServer) -> None:
@@ -183,22 +183,7 @@ def test_wait_request(server: TestServer) -> None:
 def test_request_cookies(server: TestServer) -> None:
     server.add_response(Response())
     request(url=server.get_url(), headers={"Cookie": "foo=bar"})
-    assert server.get_request().cookies["foo"]["value"] == "bar"
-
-
-def test_response_once_cookies(server: TestServer) -> None:
-    server.add_response(Response(cookies=[("foo", "bar")]), count=2)
-    info = request(server.get_url())
-    assert "foo=bar" in info.headers["Set-Cookie"]
-
-    server.add_response(Response(cookies=[("baz", "gaz")]))
-    info = request(server.get_url())
-    assert "foo=bar" not in info.headers["Set-Cookie"]
-    assert "baz=gaz" in info.headers["Set-Cookie"]
-
-    info = request(server.get_url())
-    assert "foo=bar" in info.headers["Set-Cookie"]
-    assert "baz=gaz" not in info.headers["Set-Cookie"]
+    assert server.get_request().cookies["foo"].value == "bar"
 
 
 def test_default_header_content_type(server: TestServer) -> None:
@@ -316,9 +301,7 @@ def test_callback(server: TestServer) -> None:
             "body": non_ascii_str,
             "headers": [
                 ("method", "post"),
-            ],
-            "cookies": [
-                ("foo", "bar"),
+                ("set-cookie", "foo=bar"),
             ],
         }
 
@@ -407,7 +390,6 @@ def test_callback_response_invalid_key(server: TestServer) -> None:
 
 def test_invalid_response_key() -> None:
     with pytest.raises(TypeError) as ex:
-        # pytype: disable=wrong-keyword-args
         # pylint: disable=unexpected-keyword-arg
         Response(foo="bar")  # type: ignore
     assert "unexpected keyword argument" in str(ex.value)

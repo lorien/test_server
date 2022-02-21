@@ -13,14 +13,15 @@ from http.server import BaseHTTPRequestHandler
 from http.cookies import SimpleCookie
 from urllib.parse import urljoin, parse_qsl
 
-from test_server.version import TEST_SERVER_VERSION
-from test_server.error import (
+from .version import TEST_SERVER_VERSION
+from .error import (
     TestServerError,
     WaitTimeoutError,
     InternalError,
     RequestNotProcessed,
     NoResponse,
 )
+from .structure import HttpHeadersDict, MappingData
 
 __all__: list = ["TestServer", "WaitTimeoutError", "Response"]
 
@@ -32,17 +33,15 @@ class Response(object):
         self,
         callback: Optional[Callable] = None,
         charset: Optional[str] = None,
-        cookies: Optional[list] = None,
         data: Union[str, bytes, None] = None,
-        headers: Optional[list] = None,
+        headers: Optional[MappingData] = None,
         sleep: Optional[float] = None,
         status: Optional[int] = None,
     ) -> None:
         self.callback = callback
         self.charset = "utf-8" if charset is None else charset
-        self.cookies = [] if cookies is None else cookies
         self.data = b"" if data is None else data
-        self.headers = [] if headers is None else headers
+        self.headers = HttpHeadersDict(headers)
         self.sleep = sleep
         self.status = 200 if status is None else status
 
@@ -53,20 +52,20 @@ class Request(object):
         args: Optional[dict] = None,
         charset: Optional[str] = None,
         client_ip: Optional[str] = None,
-        cookies: Optional[dict] = None,
+        cookies: Optional[SimpleCookie] = None,
         data: Optional[bytes] = None,
         files: Optional[dict] = None,
-        headers: Optional[dict] = None,
+        headers: Optional[MappingData] = None,
         method: Optional[str] = None,
         path: Optional[str] = None,
     ):
         self.args = {} if args is None else args
         self.charset = "utf-8" if charset is None else charset
         self.client_ip = {} if client_ip is None else client_ip
-        self.cookies = {} if cookies is None else cookies
+        self.cookies = cookies
         self.data = None if data is None else data
         self.files = {} if files is None else files
-        self.headers = {} if headers is None else headers
+        self.headers = HttpHeadersDict(headers)
         self.method = None if method is None else method
         self.path = None if path is None else path
 
@@ -96,7 +95,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         for key, val in params.items():
             request.args[key] = val
         for key, val in self.headers.items():
-            request.headers[key.lower()] = val
+            request.headers.add(key, val)
 
         path = self.path
         # WTF is this?
@@ -105,12 +104,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         request.path = path.split("?")[0]
         request.method = method.upper()
 
-        items = SimpleCookie(self.headers["Cookie"])
-        for item_key, item in items.items():
-            request.cookies[item_key] = {
-                "name": item_key,
-                "value": item.value,
-            }
+        request.cookies = SimpleCookie(self.headers["Cookie"])
 
         clen = int(self.headers["Content-Length"] or "0")
         request_data = self.rfile.read(clen)
@@ -152,7 +146,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
             result = {
                 "status": 200,
-                "headers": [],
+                "headers": HttpHeadersDict(),
                 "data": b"",
                 "charset": "utf-8",
             }
@@ -168,7 +162,6 @@ class TestServerHandler(BaseHTTPRequestHandler):
                             "type",
                             "status",
                             "headers",
-                            "cookies",
                             "body",
                             "charset",
                         ):
@@ -179,13 +172,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     if "status" in cb_res:
                         result["status"] = cb_res["status"]
                     if "headers" in cb_res:
-                        for key, val in cb_res["headers"]:
-                            result["headers"].append((key, val))
-                    if "cookies" in cb_res:
-                        for key, val in cb_res["cookies"]:
-                            result["headers"].append(
-                                ("Set-Cookie", "%s=%s" % (key, val))
-                            )
+                        result["headers"].extend(cb_res["headers"])
                     if "body" in cb_res:
                         if isinstance(cb_res["body"], str):
                             result["data"] = cb_res["body"].encode(result["charset"])
@@ -198,18 +185,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     )
             else:
                 result["status"] = resp.status
-
-                for key, val in resp.cookies:
-                    # Set-Cookie: name=newvalue; expires=date;
-                    # path=/; domain=.example.org.
-                    result["headers"].append(("Set-Cookie", "%s=%s" % (key, val)))
-
-                for key, value in resp.headers:
-                    result["headers"].append((key, value))
-
-                port = self.server.test_server.port  # pytype: disable=attribute-error
-                result["headers"].append(("Listen-Port", str(port)))
-                result["charset"] = resp.charset
+                result["headers"].extend(resp.headers)
                 data = resp.data
                 if isinstance(data, str):
                     result["data"] = data.encode(resp.charset)
@@ -220,18 +196,14 @@ class TestServerHandler(BaseHTTPRequestHandler):
                         'Response parameter "data" must be string or bytes'
                     )
 
-            header_keys = [x[0].lower() for x in result["headers"]]
-            if "content-type" not in header_keys:
-                result["headers"].append(
-                    (
-                        "Content-Type",
-                        "text/html; charset=%s" % result["charset"],
-                    )
+            port = self.server.test_server.port  # pytype: disable=attribute-error
+            result["headers"]["Listen-Port"] = str(port)
+            if "content-type" not in result["headers"]:
+                result["headers"]["Content-Type"] = (
+                    "text/html; charset=%s" % result["charset"]
                 )
-            if "server" not in header_keys:
-                result["headers"].append(
-                    ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
-                )
+            if "server" not in result["headers"]:
+                result["headers"]["Server"] = "TestServer/%s" % TEST_SERVER_VERSION
 
             self.write_response_data(
                 result["status"], result["headers"], result["data"]
@@ -239,20 +211,24 @@ class TestServerHandler(BaseHTTPRequestHandler):
         except Exception as ex:  # pylint: disable=broad-except
             logging.exception("Unexpected error happend in test server request handler")
             self.write_response_data(
-                INTERNAL_ERROR_RESPONSE_STATUS, [], str(ex).encode("utf-8")
+                INTERNAL_ERROR_RESPONSE_STATUS,
+                HttpHeadersDict(),
+                str(ex).encode("utf-8"),
             )
         finally:
             test_srv.num_req_processed += 1
 
-    def write_response_data(self, status, headers, data):
+    def write_response_data(
+        self, status: int, headers: HttpHeadersDict, data: bytes
+    ) -> None:
         self.send_response(status)
-        for key, val in headers:
+        for key, val in headers.items():
             self.send_header(key, val)
         self.end_headers()
         self.wfile.write(data)
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
-    def send_response(self, code, message=None):
+    def send_response(self, code: int, message: Optional[str] = None) -> None:
         """
         Custom method which does not send Server and Date headers
 
@@ -260,6 +236,29 @@ class TestServerHandler(BaseHTTPRequestHandler):
         """
         self.log_request(code)
         self.send_response_only(code, message)
+
+    # https://github.com/python/cpython/blob/main/Lib/http/server.py
+    def send_header(
+        self, keyword: str, value: Union[str, bytes]
+    ) -> None:  # pragma: no cover
+        """Custom method which keep bytes header values as is"""
+        # pylint: disable=attribute-defined-outside-init
+        if self.request_version != "HTTP/0.9":
+            if not hasattr(self, "_headers_buffer"):
+                self._headers_buffer = []
+            if isinstance(value, str):
+                bytes_value = value.encode("latin-1", "strict")
+            else:
+                bytes_value = value
+            self._headers_buffer.append(
+                b"%s: %s\r\n" % (keyword.encode("latin-1", "strict"), bytes_value)
+            )
+
+        if keyword.lower() == "connection":
+            if value.lower() == "close":
+                self.close_connection = True
+            elif value.lower() == "keep-alive":
+                self.close_connection = False
 
     do_GET = _request_handler
     do_POST = _request_handler
