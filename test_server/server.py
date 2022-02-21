@@ -154,6 +154,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 "status": 200,
                 "headers": [],
                 "data": b"",
+                "charset": "utf-8",
             }
 
             callback = resp.callback
@@ -163,10 +164,18 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     raise InternalError("Callback response is not a dict")
                 elif cb_res.get("type") == "response":
                     for key in cb_res:
-                        if key not in ("type", "status", "headers", "cookies", "body"):
+                        if key not in (
+                            "type",
+                            "status",
+                            "headers",
+                            "cookies",
+                            "body",
+                            "charset",
+                        ):
                             raise InternalError(
                                 "Callback response contains invalid key: %s" % key
                             )
+                    result["charset"] = cb_res.get("charset", "utf-8")
                     if "status" in cb_res:
                         result["status"] = cb_res["status"]
                     if "headers" in cb_res:
@@ -179,8 +188,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                             )
                     if "body" in cb_res:
                         if isinstance(cb_res["body"], str):
-                            # TODO: do not use hardcoded "utf-8"
-                            result["data"] = cb_res["body"].encode("utf-8")
+                            result["data"] = cb_res["body"].encode(result["charset"])
                         elif isinstance(cb_res["body"], bytes):
                             result["data"] = cb_res["body"]
                 else:
@@ -201,11 +209,10 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
                 port = self.server.test_server.port  # pytype: disable=attribute-error
                 result["headers"].append(("Listen-Port", str(port)))
-
+                result["charset"] = resp.charset
                 data = resp.data
-                charset = resp.charset
                 if isinstance(data, str):
-                    result["data"] = data.encode(charset)
+                    result["data"] = data.encode(resp.charset)
                 elif isinstance(data, bytes):
                     result["data"] = data
                 else:
@@ -213,18 +220,18 @@ class TestServerHandler(BaseHTTPRequestHandler):
                         'Response parameter "data" must be string or bytes'
                     )
 
-                header_keys = [x[0].lower() for x in result["headers"]]
-                if "content-type" not in header_keys:
-                    result["headers"].append(
-                        (
-                            "Content-Type",
-                            "text/html; charset=%s" % charset,
-                        )
+            header_keys = [x[0].lower() for x in result["headers"]]
+            if "content-type" not in header_keys:
+                result["headers"].append(
+                    (
+                        "Content-Type",
+                        "text/html; charset=%s" % result["charset"],
                     )
-                if "server" not in header_keys:
-                    result["headers"].append(
-                        ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
-                    )
+                )
+            if "server" not in header_keys:
+                result["headers"].append(
+                    ("Server", "TestServer/%s" % TEST_SERVER_VERSION)
+                )
 
             self.write_response_data(
                 result["status"], result["headers"], result["data"]
@@ -328,7 +335,6 @@ class TestServer(object):
 
     def get_url(self, path="", port=None):
         """Build URL that is served by HTTP server."""
-        # Yeah, stupid, just tryng to fail my Grab tests ASAP
         if port is None:
             port = self.port
         return urljoin("http://%s:%d" % (self.address, port), path)
