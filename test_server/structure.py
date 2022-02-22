@@ -7,73 +7,85 @@ from typing import (
     Mapping,
     MutableMapping,
     List,
-    Iterator,
     cast,
     Iterable,
 )
 
-__all__ = ["HttpHeadersDict"]
+__all__ = ["HttpHeaderStorage"]
 
 
-StrOrBytes = Union[str, bytes]
-MappingData = Union[
-    Mapping[str, StrOrBytes],
-    Iterable[Tuple[str, StrOrBytes]],
+HttpHeaderStream = Union[
+    Mapping[str, Union[str, bytes]],
+    Iterable[Tuple[str, Union[str, bytes]]],
 ]
 
 
-class HttpHeadersDict(MutableMapping):
-    """Structure that maps str keys to str/bytes values
+class HttpHeaderStorage(object):
+    """Storage for HTTP Headers.
 
-    If key points to multiple values these values are joined when value
-    of key is requested.
-
-    When key is requested its value/values are converted to bytes.
+    The storage maps string keys to byte values.
+    String values are accepted alse and converted to bytes.
+    One key might point to multiple values.
+    Keys are case insensitive though the original case is stored.
     """
 
     def __init__(
-        self, data: Optional[MappingData] = None, charset: str = "utf-8"
+        self, data: Optional[HttpHeaderStream] = None, charset: str = "utf-8"
     ) -> None:
         self._store: MutableMapping[str, List[Union[str, bytes]]] = OrderedDict()
         self._charset = charset
         if data is not None:
-            self.update(data)
+            self.extend(data)
 
-    def __setitem__(self, key: str, value: StrOrBytes) -> None:
-        # Remember original form of key i.e. the case
-        # Store values as bytes, convert str values into bytes if needed
-        if isinstance(value, str):
-            bytes_value = value.encode(self._charset)
+    def _normalize_bytes_value(self, val: Union[str, bytes]):
+        if isinstance(val, str):
+            return val.encode(self._charset)
         else:
-            bytes_value = value
-        self._store[key.lower()] = [key, bytes_value]
+            return val
 
-    def __getitem__(self, key: str) -> bytes:
-        return b", ".join(
-            x.encode(self._charset) if isinstance(x, str) else x
-            for x in self._store[key.lower()][1:]
-        )
+    # Public Interface
 
-    def __delitem__(self, key: str) -> None:
+    def set(self, key: str, value: Union[str, bytes]) -> None:
+        # Store original case of key
+        self._store[key.lower()] = [key, self._normalize_bytes_value(value)]
+
+    def get(self, key: str) -> bytes:
+        return cast(bytes, self._store[key.lower()][1])
+
+    def getlist(self, key: str) -> List[bytes]:
+        return cast(List[bytes], self._store[key.lower()][1:])
+
+    def remove(self, key: str):
         del self._store[key.lower()]
 
-    def __iter__(self) -> Iterator[str]:
-        return (cast(str, x[0]) for x in self._store.values())
+    def add(self, key: str, value: Union[str, bytes]):
+        box = self._store.setdefault(key.lower(), [key])
+        box.append(self._normalize_bytes_value(value))
 
-    def __len__(self) -> int:
-        return len(self._store)
+    def extend(self, data: HttpHeaderStream) -> None:
+        seq = (
+            data.items()
+            if isinstance(data, MutableMapping)
+            else cast(Iterable[Tuple[str, Union[str, bytes]]], data)
+        )
+        for key, val in seq:
+            self.add(key, self._normalize_bytes_value(val))
+
+    def __contains__(self, key: str) -> bool:
+        return key.lower() in self._store
+
+    def count_keys(self) -> int:
+        return len(self._store.keys())
+
+    def count_items(self) -> int:
+        return sum(1 for _ in self.items())
+
+    def items(self):
+        for items in self._store.values():
+            original_key = items[0]
+            for idx, item in enumerate(items):
+                if idx > 0:
+                    yield original_key, item
 
     def __repr__(self) -> str:
-        return str(dict(self.items()))
-
-    def add(self, key: str, value: StrOrBytes):
-        box = self._store.setdefault(key.lower(), [key])
-        box.append(value)
-
-    def extend(self, data: MappingData) -> None:
-        if isinstance(data, MutableMapping):
-            for key, val in data.items():
-                self.add(key, val)
-        else:
-            for key, val in cast(Iterable[Tuple[str, Union[str, bytes]]], data):
-                self.add(key, val)
+        return str(list(self.items()))

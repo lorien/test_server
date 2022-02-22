@@ -111,7 +111,7 @@ def test_response_once_headers(server: TestServer) -> None:
 def test_request_headers(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url(), headers={"Foo": "Bar"})
-    assert server.get_request().headers["foo"] == b"Bar"
+    assert server.get_request().headers.get("foo") == b"Bar"
 
 
 def test_response_once_reset_headers(server: TestServer) -> None:
@@ -309,7 +309,7 @@ def test_callback(server: TestServer) -> None:
     server.add_response(Response(callback=post_callback), method="post")
 
     info = request(server.get_url())
-    assert info.headers["method"] == "get"
+    assert info.headers.get("method") == "get"
     assert info.data == b"Hello"
 
     info = request(server.get_url(), b"key=val")

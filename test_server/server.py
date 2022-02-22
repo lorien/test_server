@@ -21,7 +21,7 @@ from .error import (
     RequestNotProcessed,
     NoResponse,
 )
-from .structure import HttpHeadersDict, MappingData
+from .structure import HttpHeaderStorage, HttpHeaderStream
 
 __all__: list = ["TestServer", "WaitTimeoutError", "Response"]
 
@@ -34,14 +34,14 @@ class Response(object):
         callback: Optional[Callable] = None,
         charset: Optional[str] = None,
         data: Union[str, bytes, None] = None,
-        headers: Optional[MappingData] = None,
+        headers: Optional[HttpHeaderStream] = None,
         sleep: Optional[float] = None,
         status: Optional[int] = None,
     ) -> None:
         self.callback = callback
         self.charset = "utf-8" if charset is None else charset
         self.data = b"" if data is None else data
-        self.headers = HttpHeadersDict(headers)
+        self.headers = HttpHeaderStorage(headers)
         self.sleep = sleep
         self.status = 200 if status is None else status
 
@@ -55,7 +55,7 @@ class Request(object):
         cookies: Optional[SimpleCookie] = None,
         data: Optional[bytes] = None,
         files: Optional[dict] = None,
-        headers: Optional[MappingData] = None,
+        headers: Optional[HttpHeaderStream] = None,
         method: Optional[str] = None,
         path: Optional[str] = None,
     ):
@@ -65,7 +65,7 @@ class Request(object):
         self.cookies = cookies
         self.data = None if data is None else data
         self.files = {} if files is None else files
-        self.headers = HttpHeadersDict(headers)
+        self.headers = HttpHeaderStorage(headers)
         self.method = None if method is None else method
         self.path = None if path is None else path
 
@@ -146,7 +146,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
             result = {
                 "status": 200,
-                "headers": HttpHeadersDict(),
+                "headers": HttpHeaderStorage(),
                 "data": b"",
                 "charset": "utf-8",
             }
@@ -185,7 +185,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     )
             else:
                 result["status"] = resp.status
-                result["headers"].extend(resp.headers)
+                result["headers"].extend(resp.headers.items())
                 data = resp.data
                 if isinstance(data, str):
                     result["data"] = data.encode(resp.charset)
@@ -197,13 +197,13 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     )
 
             port = self.server.test_server.port  # pytype: disable=attribute-error
-            result["headers"]["Listen-Port"] = str(port)
+            result["headers"].set("Listen-Port", str(port))
             if "content-type" not in result["headers"]:
-                result["headers"]["Content-Type"] = (
-                    "text/html; charset=%s" % result["charset"]
+                result["headers"].set(
+                    "Content-Type", "text/html; charset=%s" % result["charset"]
                 )
             if "server" not in result["headers"]:
-                result["headers"]["Server"] = "TestServer/%s" % TEST_SERVER_VERSION
+                result["headers"].set("Server", "TestServer/%s" % TEST_SERVER_VERSION)
 
             self.write_response_data(
                 result["status"], result["headers"], result["data"]
@@ -212,14 +212,14 @@ class TestServerHandler(BaseHTTPRequestHandler):
             logging.exception("Unexpected error happend in test server request handler")
             self.write_response_data(
                 INTERNAL_ERROR_RESPONSE_STATUS,
-                HttpHeadersDict(),
+                HttpHeaderStorage(),
                 str(ex).encode("utf-8"),
             )
         finally:
             test_srv.num_req_processed += 1
 
     def write_response_data(
-        self, status: int, headers: HttpHeadersDict, data: bytes
+        self, status: int, headers: HttpHeaderStorage, data: bytes
     ) -> None:
         self.send_response(status)
         for key, val in headers.items():
