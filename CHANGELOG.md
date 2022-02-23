@@ -1,4 +1,4 @@
-# Change Log of test-server Library
+# Change Log of test_server Library
 
 ## [0.0.32] - unreleased
 ### Changed

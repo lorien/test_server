@@ -13,7 +13,7 @@ Installation
 
 .. code:: bash
 
-    pip install test-server
+    pip install test_server
 
 
 Usage Example
