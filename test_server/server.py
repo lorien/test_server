@@ -32,12 +32,14 @@ class Response(object):
     def __init__(
         self,
         callback: Optional[Callable] = None,
+        raw_callback: Optional[Callable] = None,
         data: Optional[bytes] = None,
         headers: Optional[HttpHeaderStream] = None,
         sleep: Optional[float] = None,
         status: Optional[int] = None,
     ) -> None:
         self.callback = callback
+        self.raw_callback = raw_callback
         self.data = b"" if data is None else data
         self.headers = HttpHeaderStorage(headers)
         self.sleep = sleep
@@ -143,9 +145,15 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 "data": b"",
             }
 
-            callback = resp.callback
-            if callback:
-                cb_res = callback()
+            if resp.raw_callback:
+                data = resp.raw_callback()
+                if isinstance(data, bytes):
+                    self.write_raw_response_data(data)
+                else:
+                    raise InternalError("Raw callback must return bytes data")
+
+            if resp.callback:
+                cb_res = resp.callback()
                 if not isinstance(cb_res, dict):
                     raise InternalError("Callback response is not a dict")
                 elif cb_res.get("type") == "response":
@@ -213,6 +221,11 @@ class TestServerHandler(BaseHTTPRequestHandler):
             self.send_header(key, val)
         self.end_headers()
         self.wfile.write(data)
+
+    def write_raw_response_data(self, data: bytes) -> None:
+        self.wfile.write(data)
+        # pylint: disable=attribute-defined-outside-init
+        self._headers_buffer: List[str] = []
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
     def send_response(self, code: int, message: Optional[str] = None) -> None:

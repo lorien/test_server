@@ -45,6 +45,7 @@ The response object controls the data which the HTTP client would
 received in response from test server. Available keys are:
 
     :callback: function that builds completely custom request
+    :raw_callback: function that returns complete HTTP response as bytes blob
     :cookies: cookies
     :data: body of HTTP response
     :headers: HTTP headers

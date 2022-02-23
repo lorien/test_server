@@ -416,3 +416,21 @@ def test_add_response_count_two(server: TestServer) -> None:
     assert 200 == request(server.get_url()).status
     assert 200 == request(server.get_url()).status
     assert b"No response" in request(server.get_url()).data
+
+
+def test_raw_callback(server):
+    def callback():
+        return b"HTTP/1.1 200 OK\nFoo: Bar\nGaz: Baz\nContent-Length: 5\n\nhello"
+
+    server.add_response(Response(raw_callback=callback))
+    res = request(server.get_url())
+    assert "foo" in res.headers
+
+
+def test_raw_callback_invalid_type(server):
+    def callback():
+        return "hey"
+
+    server.add_response(Response(raw_callback=callback))
+    res = request(server.get_url())
+    assert b"must return bytes" in res.data
