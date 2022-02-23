@@ -15,61 +15,53 @@ __all__ = ["HttpHeaderStorage"]
 
 
 HttpHeaderStream = Union[
-    Mapping[str, Union[str, bytes]],
-    Iterable[Tuple[str, Union[str, bytes]]],
+    Mapping[str, str],
+    Iterable[Tuple[str, str]],
 ]
 
 
 class HttpHeaderStorage(object):
     """Storage for HTTP Headers.
 
-    The storage maps string keys to byte values.
-    String values are accepted alse and converted to bytes.
-    One key might point to multiple values.
+    The storage maps string keys to one or multiple string values.
     Keys are case insensitive though the original case is stored.
     """
 
     def __init__(
         self, data: Optional[HttpHeaderStream] = None, charset: str = "utf-8"
     ) -> None:
-        self._store: MutableMapping[str, List[Union[str, bytes]]] = OrderedDict()
+        self._store: MutableMapping[str, List[str]] = OrderedDict()
         self._charset = charset
         if data is not None:
             self.extend(data)
 
-    def _normalize_bytes_value(self, val: Union[str, bytes]):
-        if isinstance(val, str):
-            return val.encode(self._charset)
-        else:
-            return val
-
     # Public Interface
 
-    def set(self, key: str, value: Union[str, bytes]) -> None:
+    def set(self, key: str, value: str) -> None:
         # Store original case of key
-        self._store[key.lower()] = [key, self._normalize_bytes_value(value)]
+        self._store[key.lower()] = [key, value]
 
-    def get(self, key: str) -> bytes:
-        return cast(bytes, self._store[key.lower()][1])
+    def get(self, key: str) -> str:
+        return self._store[key.lower()][1]
 
-    def getlist(self, key: str) -> List[bytes]:
-        return cast(List[bytes], self._store[key.lower()][1:])
+    def getlist(self, key: str) -> List[str]:
+        return self._store[key.lower()][1:]
 
     def remove(self, key: str):
         del self._store[key.lower()]
 
-    def add(self, key: str, value: Union[str, bytes]):
+    def add(self, key: str, value: str):
         box = self._store.setdefault(key.lower(), [key])
-        box.append(self._normalize_bytes_value(value))
+        box.append(value)
 
     def extend(self, data: HttpHeaderStream) -> None:
         seq = (
             data.items()
             if isinstance(data, MutableMapping)
-            else cast(Iterable[Tuple[str, Union[str, bytes]]], data)
+            else cast(Iterable[Tuple[str, str]], data)
         )
         for key, val in seq:
-            self.add(key, self._normalize_bytes_value(val))
+            self.add(key, val)
 
     def __contains__(self, key: str) -> bool:
         return key.lower() in self._store

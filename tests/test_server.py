@@ -2,7 +2,7 @@
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
 import time
-from urllib.parse import unquote
+from urllib.parse import unquote, quote
 
 from urllib3 import PoolManager
 from urllib3.util.retry import Retry
@@ -25,14 +25,17 @@ EXTRA_PORT = 10100
 pool = PoolManager()
 
 
-def request(url, data=None, method=None, headers=None, fields=None) -> HTTPResponse:
+def request(
+    url, data=None, method=None, headers=None, fields=None, retries_redirect=10
+) -> HTTPResponse:
     params = {
         "headers": headers,
         "timeout": NETWORK_TIMEOUT,
         "retries": Retry(
+            total=None,
             connect=0,
             read=0,
-            redirect=10,
+            redirect=retries_redirect,
             other=0,
         ),
         "fields": fields,
@@ -42,7 +45,24 @@ def request(url, data=None, method=None, headers=None, fields=None) -> HTTPRespo
         params["body"] = data
     if not method:
         method = "POST" if (data or fields) else "GET"
+    print("~" * 10, method, url, params)
     return pool.request(method, url, **params)
+
+
+# WTF: urllib3 makes TWO requests :-/
+# def test_non_ascii_header(server: TestServer) -> None:
+#    server.add_response(Response(headers=[("z", server.get_url() + "фыва")]))
+#    res = request(server.get_url(), retries_redirect=False)
+#    print(res.headers)
+
+
+def test_non_ascii_header(server: TestServer) -> None:
+    server.add_response(
+        Response(status=301, headers=[("Location", server.get_url(quote("фыва")))])
+    )
+    server.add_response(Response())
+    request(server.get_url())
+    assert quote("фыва") in server.get_request().path
 
 
 def test_get(server: TestServer) -> None:
@@ -53,10 +73,10 @@ def test_get(server: TestServer) -> None:
 
 
 def test_non_utf_request_data(server: TestServer) -> None:
-    server.add_response(Response(data="abc"))
-    res = request(url=server.get_url(), data=u"конь".encode("cp1251"))
+    server.add_response(Response(data=b"abc"))
+    res = request(url=server.get_url(), data="конь".encode("cp1251"))
     assert res.data == b"abc"
-    assert server.get_request().data == u"конь".encode("cp1251")
+    assert server.get_request().data == "конь".encode("cp1251")
 
 
 def test_request_client_ip(server: TestServer) -> None:
@@ -73,45 +93,22 @@ def test_path(server: TestServer) -> None:
 
 
 def test_post(server: TestServer) -> None:
-    server.add_response(Response(data="abc"), method="post")
+    server.add_response(Response(data=b"abc"), method="post")
     res = request(server.get_url(), b"req-data")
     assert res.data == b"abc"
     assert server.get_request().data == b"req-data"
 
 
-def test_response_once_get(server: TestServer) -> None:
-    server.add_response(Response(data="base"), count=2)
-    assert request(server.get_url()).data == b"base"
-    server.add_response(Response(data="tmp"))
-    assert request(server.get_url()).data == b"tmp"
-    assert request(server.get_url()).data == b"base"
-
-
 def test_response_once_specific_method(server: TestServer) -> None:
-    server.add_response(Response(data="bar"), method="get")
-    server.add_response(Response(data="foo"))
+    server.add_response(Response(data=b"bar"), method="get")
+    server.add_response(Response(data=b"foo"))
     assert request(server.get_url()).data == b"bar"
-
-
-def test_response_once_headers(server: TestServer) -> None:
-    server.add_response(Response(headers=[("foo", "bar")]), count=2)
-    info = request(server.get_url())
-    assert info.headers["foo"] == "bar"
-
-    server.add_response(Response(headers=[("baz", "gaz")]))
-    info = request(server.get_url())
-    assert info.headers["baz"] == "gaz"
-    assert "foo" not in info.headers
-
-    info = request(server.get_url())
-    assert "baz" not in info.headers
-    assert info.headers["foo"] == "bar"
 
 
 def test_request_headers(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url(), headers={"Foo": "Bar"})
-    assert server.get_request().headers.get("foo") == b"Bar"
+    assert server.get_request().headers.get("foo") == "Bar"
 
 
 def test_response_once_reset_headers(server: TestServer) -> None:
@@ -138,17 +135,6 @@ def test_method_sleep(server: TestServer) -> None:
     assert elapsed > delay
 
 
-def test_response_once_code(server: TestServer) -> None:
-    server.add_response(Response(), count=2)
-    res = request(server.get_url())
-    assert res.status == 200
-    server.add_response(Response(status=403))
-    res = request(server.get_url())
-    assert res.status == 403
-    res = request(server.get_url())
-    assert res.status == 200
-
-
 def test_request_done_after_start(server: TestServer) -> None:
     server = TestServer(port=EXTRA_PORT)
     try:
@@ -170,7 +156,7 @@ def test_wait_request(server: TestServer) -> None:
 
     def worker():
         time.sleep(1)
-        request(server.get_url() + "?method=test-wait-request")
+        request(server.get_url("?method=test-wait-request"))
 
     th = Thread(target=worker)
     th.start()
@@ -244,7 +230,6 @@ def test_specific_port() -> None:
 
 
 def test_null_bytes(server: TestServer) -> None:
-    server.add_response(Response(data=b"zzz"))
     server.add_response(
         Response(
             status=302,
@@ -253,6 +238,7 @@ def test_null_bytes(server: TestServer) -> None:
             ],
         )
     )
+    server.add_response(Response(data=b"zzz"))
     res = request(server.get_url())
     assert res.data == b"zzz"
     assert unquote(server.get_request().path) == "/\x00/"
@@ -274,21 +260,11 @@ def test_null_bytes(server: TestServer) -> None:
 #    return data
 
 
-def test_utf_header(server: TestServer) -> None:
-    server.add_response(
-        Response(headers=[("Location", (server.get_url() + u"фыва").encode("utf-8"))])
-    )
-    request(server.get_url())
-    # WTF ???
-
-
 def test_callback(server: TestServer) -> None:
-    non_ascii_str = "фыва"
-
     def get_callback():
         return {
             "type": "response",
-            "body": b"Hello",
+            "data": b"Hello",
             "headers": [
                 ("method", "get"),
             ],
@@ -298,7 +274,7 @@ def test_callback(server: TestServer) -> None:
         return {
             "type": "response",
             "status": 201,
-            "body": non_ascii_str,
+            "data": b"hey",
             "headers": [
                 ("method", "post"),
                 ("set-cookie", "foo=bar"),
@@ -315,7 +291,7 @@ def test_callback(server: TestServer) -> None:
     info = request(server.get_url(), b"key=val")
     assert info.headers["method"] == "post"
     assert info.headers["set-cookie"] == "foo=bar"
-    assert info.data == non_ascii_str.encode("utf-8")
+    assert info.data == b"hey"
     assert info.status == 201
 
 
@@ -323,7 +299,7 @@ def test_response_data_invalid_type(server: TestServer) -> None:
     server.add_response(Response(data=1))  # type: ignore
     res = request(server.get_url())
     assert res.status == 555
-    assert b"must be string or bytes" in res.data
+    assert b"must be bytes" in res.data
 
 
 def test_stop_not_started_server() -> None:
@@ -386,6 +362,19 @@ def test_callback_response_invalid_key(server: TestServer) -> None:
     res = request(server.get_url())
     assert res.status == 555
     assert b"contains invalid key" in res.data
+
+
+def test_callback_data_non_bytes(server: TestServer) -> None:
+    def callback():
+        return {
+            "type": "response",
+            "data": "bar",
+        }
+
+    server.add_response(Response(callback=callback))
+    res = request(server.get_url())
+    assert res.status == 555
+    assert b"must be bytes" in res.data
 
 
 def test_invalid_response_key() -> None:

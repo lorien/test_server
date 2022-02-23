@@ -23,25 +23,41 @@ Example:
 
 .. code:: python
 
-    from unittest import TestCase
-    from urllib.request import urlopen
-    from test_server import TestServer, Response
+   from unittest import TestCase
+   import unittest
+   from urllib.request import urlopen
 
-    class UrllibTestCase(TestCase):
-        @classmethod
-        def setUpClass(cls):
-            cls.server = TestServer()
-            cls.server.start()
+   from test_server import TestServer, Response, HttpHeaderStorage
 
-        @classmethod
-        def tearDownClass(cls):
-            cls.server.stop()
 
-        def setUp(self):
-            self.server.reset()
+   class UrllibTestCase(TestCase):
+       @classmethod
+       def setUpClass(cls):
+           cls.server = TestServer()
+           cls.server.start()
 
-        def test_get(self):
-            token = b'zorro'
-            self.server.add_response(Response(data=token))
-            data = urlopen(self.server.base_url).read()
-            self.assertEqual(data, token)
+       @classmethod
+       def tearDownClass(cls):
+           cls.server.stop()
+
+       def setUp(self):
+           self.server.reset()
+
+       def test_get(self):
+           self.server.add_response(
+               Response(
+                   data=b"hello",
+                   headers={"foo": "bar"},
+               )
+           )
+           self.server.add_response(Response(data=b"zzz"))
+           url = self.server.get_url()
+           info = urlopen(url)
+           self.assertEqual(b"hello", info.read())
+           self.assertEqual("bar", info.headers["foo"])
+           info = urlopen(url)
+           self.assertEqual(b"zzz", info.read())
+           self.assertTrue("bar" not in info.headers)
+
+
+   unittest.main()

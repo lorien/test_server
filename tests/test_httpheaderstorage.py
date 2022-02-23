@@ -18,14 +18,14 @@ def test_constructor_list():
 def test_set_get_simple_value():
     obj = HttpHeaderStorage()
     obj.set("foo", "bar")
-    assert obj.get("foo") == b"bar"
+    assert obj.get("foo") == "bar"
 
 
 def test_set_get_multi_value():
     obj = HttpHeaderStorage()
     obj.add("foo", "bar")
     obj.add("foo", "baz")
-    assert obj.getlist("foo") == [b"bar", b"baz"]
+    assert obj.getlist("foo") == ["bar", "baz"]
 
 
 def test_delitem():
@@ -42,12 +42,12 @@ def test_repr():
     obj = HttpHeaderStorage()
     obj.add("foo", "bar")
     obj.add("foo", "baz")
-    assert repr(obj) == "[('foo', b'bar'), ('foo', b'baz')]"
+    assert repr(obj) == "[('foo', 'bar'), ('foo', 'baz')]"
 
 
 def test_constructor_key_multivalue():
     obj = HttpHeaderStorage([("set-cookie", "foo=bar"), ("set-cookie", "baz=gaz")])
-    assert obj.getlist("set-cookie") == [b"foo=bar", b"baz=gaz"]
+    assert obj.getlist("set-cookie") == ["foo=bar", "baz=gaz"]
 
 
 def test_count_keys():

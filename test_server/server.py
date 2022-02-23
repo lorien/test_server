@@ -6,7 +6,7 @@ from threading import Thread, Event
 import cgi
 from io import BytesIO
 import logging
-from typing import Optional, Union, Callable, List
+from typing import Optional, Callable, List
 
 from socketserver import ThreadingMixIn, TCPServer
 from http.server import BaseHTTPRequestHandler
@@ -32,14 +32,12 @@ class Response(object):
     def __init__(
         self,
         callback: Optional[Callable] = None,
-        charset: Optional[str] = None,
-        data: Union[str, bytes, None] = None,
+        data: Optional[bytes] = None,
         headers: Optional[HttpHeaderStream] = None,
         sleep: Optional[float] = None,
         status: Optional[int] = None,
     ) -> None:
         self.callback = callback
-        self.charset = "utf-8" if charset is None else charset
         self.data = b"" if data is None else data
         self.headers = HttpHeaderStorage(headers)
         self.sleep = sleep
@@ -50,7 +48,6 @@ class Request(object):
     def __init__(
         self,
         args: Optional[dict] = None,
-        charset: Optional[str] = None,
         client_ip: Optional[str] = None,
         cookies: Optional[SimpleCookie] = None,
         data: Optional[bytes] = None,
@@ -60,7 +57,6 @@ class Request(object):
         path: Optional[str] = None,
     ):
         self.args = {} if args is None else args
-        self.charset = "utf-8" if charset is None else charset
         self.client_ip = {} if client_ip is None else client_ip
         self.cookies = cookies
         self.data = None if data is None else data
@@ -98,9 +94,6 @@ class TestServerHandler(BaseHTTPRequestHandler):
             request.headers.add(key, val)
 
         path = self.path
-        # WTF is this?
-        # if isinstance(path, bytes):
-        #    path = path.decode("utf-8")
         request.path = path.split("?")[0]
         request.method = method.upper()
 
@@ -148,7 +141,6 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 "status": 200,
                 "headers": HttpHeaderStorage(),
                 "data": b"",
-                "charset": "utf-8",
             }
 
             callback = resp.callback
@@ -162,22 +154,22 @@ class TestServerHandler(BaseHTTPRequestHandler):
                             "type",
                             "status",
                             "headers",
-                            "body",
-                            "charset",
+                            "data",
                         ):
                             raise InternalError(
                                 "Callback response contains invalid key: %s" % key
                             )
-                    result["charset"] = cb_res.get("charset", "utf-8")
                     if "status" in cb_res:
                         result["status"] = cb_res["status"]
                     if "headers" in cb_res:
                         result["headers"].extend(cb_res["headers"])
-                    if "body" in cb_res:
-                        if isinstance(cb_res["body"], str):
-                            result["data"] = cb_res["body"].encode(result["charset"])
-                        elif isinstance(cb_res["body"], bytes):
-                            result["data"] = cb_res["body"]
+                    if "data" in cb_res:
+                        if isinstance(cb_res["data"], bytes):
+                            result["data"] = cb_res["data"]
+                        else:
+                            raise InternalError(
+                                'Callback repsponse field "data" must be bytes'
+                            )
                 else:
                     raise InternalError(
                         "Callback response has invalid type key: %s"
@@ -187,21 +179,15 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 result["status"] = resp.status
                 result["headers"].extend(resp.headers.items())
                 data = resp.data
-                if isinstance(data, str):
-                    result["data"] = data.encode(resp.charset)
-                elif isinstance(data, bytes):
+                if isinstance(data, bytes):
                     result["data"] = data
                 else:
-                    raise InternalError(
-                        'Response parameter "data" must be string or bytes'
-                    )
+                    raise InternalError('Response parameter "data" must be bytes')
 
             port = self.server.test_server.port  # pytype: disable=attribute-error
             result["headers"].set("Listen-Port", str(port))
             if "content-type" not in result["headers"]:
-                result["headers"].set(
-                    "Content-Type", "text/html; charset=%s" % result["charset"]
-                )
+                result["headers"].set("Content-Type", "text/html; charset=utf-8")
             if "server" not in result["headers"]:
                 result["headers"].set("Server", "TestServer/%s" % TEST_SERVER_VERSION)
 
@@ -222,6 +208,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self, status: int, headers: HttpHeaderStorage, data: bytes
     ) -> None:
         self.send_response(status)
+        print(list(headers.items()))
         for key, val in headers.items():
             self.send_header(key, val)
         self.end_headers()
@@ -237,29 +224,6 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self.log_request(code)
         self.send_response_only(code, message)
 
-    # https://github.com/python/cpython/blob/main/Lib/http/server.py
-    def send_header(
-        self, keyword: str, value: Union[str, bytes]
-    ) -> None:  # pragma: no cover
-        """Custom method which keep bytes header values as is"""
-        # pylint: disable=attribute-defined-outside-init
-        if self.request_version != "HTTP/0.9":
-            if not hasattr(self, "_headers_buffer"):
-                self._headers_buffer = []
-            if isinstance(value, str):
-                bytes_value = value.encode("latin-1", "strict")
-            else:
-                bytes_value = value
-            self._headers_buffer.append(
-                b"%s: %s\r\n" % (keyword.encode("latin-1", "strict"), bytes_value)
-            )
-
-        if keyword.lower() == "connection":
-            if value.lower() == "close":
-                self.close_connection = True
-            elif value.lower() == "keep-alive":
-                self.close_connection = False
-
     do_GET = _request_handler
     do_POST = _request_handler
     do_PUT = _request_handler
@@ -273,18 +237,13 @@ class TestServer(object):
         self.server_started = Event()
         self._requests = []
         self._responses = defaultdict(list)
-        self.port = port
+        self.port = None
+        self._config_port = port
         self.address = address
         self._handler = None
         self._thread = None
         self._server = None
         self._started = Event()
-        self.config = {}
-        self.config.update(
-            {
-                "port": self.port,
-            }
-        )
         self.num_req_processed = 0
         self.reset()
 
@@ -295,7 +254,7 @@ class TestServer(object):
         """
 
         self._server = ThreadingTCPServer(
-            (self.address, self.port), TestServerHandler, test_server=self
+            (self.address, self._config_port), TestServerHandler, test_server=self
         )
         self._server.serve_forever(poll_interval=0.1)
 
@@ -304,7 +263,7 @@ class TestServer(object):
     # ****************
 
     def add_request(self, req):
-        self._requests.insert(0, req)
+        self._requests.append(req)
 
     def reset(self):
         self.num_req_processed = 0
@@ -319,6 +278,7 @@ class TestServer(object):
         self._thread.daemon = daemon
         self._thread.start()
         self.wait_server_started()
+        self.port = self._server.socket.getsockname()[1]
 
     def wait_server_started(self):
         # I could not foind another way
@@ -353,7 +313,7 @@ class TestServer(object):
 
     def get_request(self):
         try:
-            return self._requests[0]
+            return self._requests[-1]
         except IndexError as ex:
             raise RequestNotProcessed("Request has not been processed") from ex
 
@@ -362,8 +322,7 @@ class TestServer(object):
         assert count < 0 or count > 0
         if method and method not in VALID_METHODS:
             raise TestServerError("Invalid method: %s" % method)
-        self._responses[method].insert(
-            0,
+        self._responses[method].append(
             {
                 "count": count,
                 "response": resp,

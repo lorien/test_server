@@ -15,10 +15,10 @@ Basic example:
 
     server = TestServer()
     server.start()
-    server.add_response(Response(datab'response-data'))
+    server.add_response(Response(data=b'response-data'))
     req = urlopen(server.get_url(), b'request-data')
     assert req.read() == b'response-data'
-    assert server.get_request.data == b'request-data'
+    assert server.get_request().data == b'request-data'
 
 
 Request object
