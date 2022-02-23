@@ -14,6 +14,7 @@ from test_server import (
     WaitTimeoutError,
     TestServerError,
     Response,
+    Request,
     RequestNotProcessed,
 )
 import test_server
@@ -425,6 +426,7 @@ def test_raw_callback(server):
     server.add_response(Response(raw_callback=callback))
     res = request(server.get_url())
     assert "foo" in res.headers
+    assert b"hello" == res.data
 
 
 def test_raw_callback_invalid_type(server):
@@ -434,3 +436,15 @@ def test_raw_callback_invalid_type(server):
     server.add_response(Response(raw_callback=callback))
     res = request(server.get_url())
     assert b"must return bytes" in res.data
+
+
+def test_request_property(server):
+    server.add_response(Response())
+    request(server.get_url())
+    assert isinstance(server.request, Request)
+
+
+def test_put_request(server):
+    server.add_response(Response())
+    request(server.get_url(), data=b"foo", method="put")
+    assert server.request.method == "PUT"

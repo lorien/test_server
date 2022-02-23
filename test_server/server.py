@@ -23,7 +23,7 @@ from .error import (
 )
 from .structure import HttpHeaderStorage, HttpHeaderStream
 
-__all__: list = ["TestServer", "WaitTimeoutError", "Response"]
+__all__: list = ["TestServer", "WaitTimeoutError", "Response", "Request"]
 
 INTERNAL_ERROR_RESPONSE_STATUS: int = 555
 
@@ -72,17 +72,19 @@ VALID_METHODS: List[str] = ["get", "post", "put", "delete", "options", "patch"]
 
 
 class ThreadingTCPServer(ThreadingMixIn, TCPServer):
-    allow_reuse_address = True
-    started = False
+    allow_reuse_address: bool = True
+    started: bool = False
 
-    def __init__(self, server_address, RequestHandlerClass, test_server=None, **kwargs):
+    def __init__(
+        self, server_address, RequestHandlerClass, test_server=None, **kwargs
+    ) -> None:
         super().__init__(server_address, RequestHandlerClass, **kwargs)
         self.test_server = test_server
         self.test_server.server_started.set()
 
 
 class TestServerHandler(BaseHTTPRequestHandler):
-    def _collect_request_data(self, method):
+    def _collect_request_data(self, method: str) -> Request:
         request = Request()
         request.client_ip = self.client_address[0]
         try:
@@ -130,7 +132,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
         return request
 
-    def _request_handler(self):
+    def _request_handler(self) -> None:
         try:
             test_srv = self.server.test_server  # pytype: disable=attribute-error
             method = self.command.lower()
@@ -149,6 +151,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 data = resp.raw_callback()
                 if isinstance(data, bytes):
                     self.write_raw_response_data(data)
+                    return
                 else:
                     raise InternalError("Raw callback must return bytes data")
 
@@ -216,7 +219,6 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self, status: int, headers: HttpHeaderStorage, data: bytes
     ) -> None:
         self.send_response(status)
-        print(list(headers.items()))
         for key, val in headers.items():
             self.send_header(key, val)
         self.end_headers()
@@ -246,21 +248,20 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
 
 class TestServer(object):
-    def __init__(self, address="127.0.0.1", port=0):
-        self.server_started = Event()
-        self._requests = []
-        self._responses = defaultdict(list)
-        self.port = None
-        self._config_port = port
-        self.address = address
-        self._handler = None
-        self._thread = None
-        self._server = None
-        self._started = Event()
-        self.num_req_processed = 0
+    def __init__(self, address="127.0.0.1", port=0) -> None:
+        self.server_started: Event = Event()
+        self._requests: List = []
+        self._responses: MutableMapping = defaultdict(list)
+        self.port: Optional[int] = None
+        self._config_port: int = port
+        self.address: str = address
+        self._thread: Thread = None
+        self._server: ThreadingTCPServer = None
+        self._started: Event = Event()
+        self.num_req_processed: int = 0
         self.reset()
 
-    def _thread_server(self):
+    def _thread_server(self) -> None:
         """Ask HTTP server start processing requests
 
         This function is supposed to be run in separate thread.
@@ -275,15 +276,15 @@ class TestServer(object):
     # Public Interface
     # ****************
 
-    def add_request(self, req):
+    def add_request(self, req: Request) -> None:
         self._requests.append(req)
 
-    def reset(self):
+    def reset(self) -> None:
         self.num_req_processed = 0
         self._requests.clear()
         self._responses.clear()
 
-    def start(self, daemon=True):
+    def start(self, daemon: bool = True) -> None:
         """Start the HTTP server."""
         self._thread = Thread(
             target=self._thread_server,
@@ -293,27 +294,27 @@ class TestServer(object):
         self.wait_server_started()
         self.port = self._server.socket.getsockname()[1]
 
-    def wait_server_started(self):
+    def wait_server_started(self) -> None:
         # I could not foind another way
         # to handle multiple socket issues
         # other than taking some sleep
         time.sleep(0.01)
         self.server_started.wait()
 
-    def stop(self):
+    def stop(self) -> None:
         if self._server:
             self._server.shutdown()
             self._server.server_close()
 
-    def get_url(self, path="", port=None):
+    def get_url(self, path: str = "", port: Optional[int] = None) -> str:
         """Build URL that is served by HTTP server."""
         if port is None:
             port = self.port
         return urljoin("http://%s:%d" % (self.address, port), path)
 
-    def wait_request(self, timeout):
+    def wait_request(self, timeout: float) -> None:
         """Stupid implementation that eats CPU."""
-        start = time.time()
+        start: float = time.time()
         while True:
             if self.num_req_processed:
                 break
@@ -321,16 +322,20 @@ class TestServer(object):
             if time.time() - start > timeout:
                 raise WaitTimeoutError("No request processed in %d seconds" % timeout)
 
-    def request_is_done(self):
-        return self.num_req_processed
+    def request_is_done(self) -> bool:
+        return self.num_req_processed > 0
 
-    def get_request(self):
+    def get_request(self) -> Request:
         try:
             return self._requests[-1]
         except IndexError as ex:
             raise RequestNotProcessed("Request has not been processed") from ex
 
-    def add_response(self, resp: Response, count=1, method=None):
+    @property
+    def request(self) -> Request:
+        return self.get_request()
+
+    def add_response(self, resp: Response, count: int = 1, method: str = None) -> None:
         assert method is None or isinstance(method, str)
         assert count < 0 or count > 0
         if method and method not in VALID_METHODS:
@@ -342,7 +347,7 @@ class TestServer(object):
             },
         )
 
-    def get_response(self, method):
+    def get_response(self, method: str) -> Response:
         while True:
             item = None
             scope = None
