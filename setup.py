@@ -6,7 +6,7 @@ ROOT = os.path.dirname(os.path.realpath(__file__))
 
 setup(
     # Meta data
-    name="test-server",
+    name="test_server",
     version="0.0.34",
     author="Gregory Petukhov",
     author_email="lorien@lorien.name",
@@ -15,7 +15,7 @@ setup(
     url="https://github.com/lorien/test_server",
     description="Server for testing HTTP clients",
     long_description=open(os.path.join(ROOT, "README.rst"), encoding="utf-8").read(),
-    download_url="https://pypi.python.org/pypi/test-server",
+    download_url="https://pypi.python.org/pypi/test_server",
     keywords="test testing server http-server",
     license="MIT License",
     # Package files
