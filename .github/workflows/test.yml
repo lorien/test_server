@@ -25,7 +25,7 @@ jobs:
 
     - name: Run tests
       run: |
-        coverage run runtest.py --test-all
+        coverage run -m pytest
 
     #- name: Upload coverage results
     #  env:
