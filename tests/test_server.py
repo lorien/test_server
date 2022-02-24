@@ -23,7 +23,7 @@ from .util import fixture_global_server, fixture_server  # pylint: disable=unuse
 
 NETWORK_TIMEOUT = 1
 SPECIFIC_TEST_PORT = 10100
-# pool = PoolManager()
+pool = PoolManager()
 
 
 def request(
@@ -47,7 +47,7 @@ def request(
     if not method:
         method = "POST" if (data or fields) else "GET"
     print("~" * 10, method, url, params)
-    return PoolManager().request(method, url, **params)
+    return pool.request(method, url, **params)
 
 
 # WTF: urllib3 makes TWO requests :-/
@@ -419,16 +419,16 @@ def test_add_response_count_two(server: TestServer) -> None:
     assert b"No response" in request(server.get_url()).data
 
 
-def test_raw_callback(server):
-    def callback():
-        return (
-            b"HTTP/1.1 200 OK\r\nFoo: Bar\r\nGaz: Baz\r\nContent-Length: 5\r\n\r\nhello"
-        )
-
-    server.add_response(Response(raw_callback=callback))
-    res = request(server.get_url())
-    assert "foo" in res.headers
-    assert b"hello" == res.data
+# def test_raw_callback(server):
+#    def callback():
+#        return (
+#            b"HTTP/1.1 200 OK\r\nFoo: Bar\r\nGaz: Baz\r\nContent-Length: 5\r\n\r\nhello"
+#        )
+#
+#    server.add_response(Response(raw_callback=callback))
+#    res = request(server.get_url())
+#    assert "foo" in res.headers
+#    assert b"hello" == res.data
 
 
 # def test_raw_callback_invalid_type(server):
