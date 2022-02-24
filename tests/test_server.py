@@ -23,7 +23,7 @@ from .util import fixture_global_server, fixture_server  # pylint: disable=unuse
 
 NETWORK_TIMEOUT = 1
 SPECIFIC_TEST_PORT = 10100
-pool = PoolManager()
+# pool = PoolManager()
 
 
 def request(
@@ -47,7 +47,7 @@ def request(
     if not method:
         method = "POST" if (data or fields) else "GET"
     print("~" * 10, method, url, params)
-    return pool.request(method, url, **params)
+    return PoolManager().request(method, url, **params)
 
 
 # WTF: urllib3 makes TWO requests :-/
