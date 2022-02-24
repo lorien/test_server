@@ -228,6 +228,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
         # pylint: disable=attribute-defined-outside-init
         self._headers_buffer: List[str] = []
+        # trying to fix strange bug
+        self.close_connection = True
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
     def send_response(self, code: int, message: Optional[str] = None) -> None:
