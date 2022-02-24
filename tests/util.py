@@ -8,8 +8,8 @@ STATE = {"server": None}
 @pytest.fixture(scope="session", name="global_server")
 def fixture_global_server():
     if not STATE["server"]:
-        srv = TestServer(port=9998)
-        srv.start(daemon=True)
+        srv = TestServer()
+        srv.start()
         STATE["server"] = srv
     yield STATE["server"]
     if STATE["server"]:

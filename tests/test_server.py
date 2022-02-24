@@ -22,7 +22,7 @@ import test_server
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
 
 NETWORK_TIMEOUT = 1
-EXTRA_PORT = 10100
+SPECIFIC_TEST_PORT = 10100
 pool = PoolManager()
 
 
@@ -137,7 +137,7 @@ def test_method_sleep(server: TestServer) -> None:
 
 
 def test_request_done_after_start(server: TestServer) -> None:
-    server = TestServer(port=EXTRA_PORT)
+    server = TestServer()
     try:
         server.start()
         assert not server.request_is_done()
@@ -208,7 +208,7 @@ def test_options_method(server: TestServer) -> None:
 
 def test_multiple_start_stop_cycles() -> None:
     for cnt in range(30):
-        server = TestServer(port=EXTRA_PORT + cnt)
+        server = TestServer()
         server.start()
         try:
             server.add_response(Response(data=b"zorro"), count=10)
@@ -220,7 +220,7 @@ def test_multiple_start_stop_cycles() -> None:
 
 
 def test_specific_port() -> None:
-    server = TestServer(address="localhost", port=EXTRA_PORT)
+    server = TestServer(address="localhost", port=SPECIFIC_TEST_PORT)
     try:
         server.start()
         server.add_response(Response(data=b"abc"))
@@ -304,12 +304,12 @@ def test_response_data_invalid_type(server: TestServer) -> None:
 
 
 def test_stop_not_started_server() -> None:
-    server = TestServer(port=EXTRA_PORT)
+    server = TestServer()
     server.stop()
 
 
 def test_start_request_stop_same_port() -> None:
-    server = TestServer(port=EXTRA_PORT)
+    server = TestServer()
     for _ in range(10):
         try:
             server.start()
