@@ -46,7 +46,6 @@ def request(
         params["body"] = data
     if not method:
         method = "POST" if (data or fields) else "GET"
-    print("~" * 10, method, url, params)
     return pool.request(method, url, **params)
 
 
@@ -245,22 +244,6 @@ def test_null_bytes(server: TestServer) -> None:
     assert unquote(server.get_request().path) == "/\x00/"
 
 
-# def send_get_request(host, port, path):
-#    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-#    sock.connect((host, port))
-#    data = (
-#        b'GET %s HTTP/1.1\r\n'
-#        b'Host: %s\r\n'
-#        b'\r\n'
-#        #% (quote(path, safe='/').encode('utf-8'), host.encode('utf-8'))
-#        % (path, host.encode('utf-8'))
-#    )
-#    sock.send(data)
-#    data = sock.recv(1024 * 10)
-#    sock.close()
-#    return data
-
-
 def test_callback(server: TestServer) -> None:
     def get_callback():
         return {
@@ -421,7 +404,7 @@ def test_add_response_count_two(server: TestServer) -> None:
 
 def test_raw_callback(server):
     def callback():
-        return b"HTTP/1.1 200 OK\nFoo: Bar\nGaz: Baz\nContent-Length: 5\n\nhello"
+        return b"HTTP/1.0 200 OK\nFoo: Bar\nGaz: Baz\nContent-Length: 5\n\nhello"
 
     server.add_response(Response(raw_callback=callback))
     res = request(server.get_url())
