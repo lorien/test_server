@@ -421,7 +421,10 @@ def test_add_response_count_two(server: TestServer) -> None:
 
 def test_raw_callback(server):
     def callback():
-        return b"HTTP/1.1 200 OK\nFoo: Bar\nGaz: Baz\nContent-Length: 5\n\nhello"
+        return (
+            b"HTTP/1.1 200 OK\nFoo: Bar\nGaz: Baz\n"
+            b"Connection: close\nContent-Length: 5\n\nhello"
+        )
 
     server.add_response(Response(raw_callback=callback))
     res = request(server.get_url())
