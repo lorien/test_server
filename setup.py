@@ -20,6 +20,7 @@ setup(
     license="MIT License",
     # Package files
     packages=["test_server"],
+    packages_data={"test_server": ["py.typed"]},
     zip_safe=False,
     install_requires=[],
     # Topics
