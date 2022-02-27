@@ -1,7 +1,7 @@
 [MASTER]
 jobs=4
 
-[MESSAGE_CONTROL]
+[MESSAGES CONTROL]
 disable=R,missing-docstring,no-member,fixme
 
 [BASIC]

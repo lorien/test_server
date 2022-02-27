@@ -20,6 +20,7 @@ setup(
     license="MIT License",
     # Package files
     packages=["test_server"],
+    zip_safe=False,
     install_requires=[],
     # Topics
     classifiers=[

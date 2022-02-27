@@ -206,7 +206,7 @@ def test_options_method(server: TestServer) -> None:
 
 
 def test_multiple_start_stop_cycles() -> None:
-    for cnt in range(30):
+    for _ in range(30):
         server = TestServer()
         server.start()
         try:
