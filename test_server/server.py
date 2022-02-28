@@ -90,9 +90,9 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
     started: bool = False
 
     def __init__(
-        self, server_address, RequestHandlerClass, test_server=None, **kwargs
+        self, server_address, request_handler_class, test_server=None, **kwargs
     ) -> None:
-        super().__init__(server_address, RequestHandlerClass, **kwargs)
+        super().__init__(server_address, request_handler_class, **kwargs)
         self.test_server = test_server
         self.test_server.server_started.set()
 
@@ -253,12 +253,12 @@ class TestServerHandler(BaseHTTPRequestHandler):
         self.log_request(code)
         self.send_response_only(code, message)
 
-    do_GET = _request_handler
-    do_POST = _request_handler
-    do_PUT = _request_handler
-    do_DELETE = _request_handler
-    do_OPTIONS = _request_handler
-    do_PATCH = _request_handler
+    do_GET = _request_handler  # noqa: N815
+    do_POST = _request_handler  # noqa: N815
+    do_PUT = _request_handler  # noqa: N815
+    do_DELETE = _request_handler  # noqa: N815
+    do_OPTIONS = _request_handler  # noqa: N815
+    do_PATCH = _request_handler  # noqa: N815
 
 
 class TestServer(object):

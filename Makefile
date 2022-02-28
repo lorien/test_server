@@ -18,6 +18,7 @@ release:
 
 check:
 	python setup.py check -s \
+		&& pyroma --min 10 . \
 		&& pylint setup.py test_server tests \
 		&& flake8 setup.py test_server tests \
 		&& pytype setup.py test_server tests \

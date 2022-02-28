@@ -8,3 +8,4 @@ pytype
 mypy
 types-urllib3
 types-setuptools
+pyroma
