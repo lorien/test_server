@@ -20,11 +20,12 @@ setup(
     license="MIT License",
     # Package files
     packages=["test_server"],
-    packages_data={"test_server": ["py.typed"]},
+    package_data={"test_server": ["py.typed"]},
     zip_safe=False,
     install_requires=[],
     # Topics
     classifiers=[
+        "Development Status :: 4 - Beta",
         "Programming Language :: Python",
         "Programming Language :: Python :: 3.4",
         "Programming Language :: Python :: 3.5",
