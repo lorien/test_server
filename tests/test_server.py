@@ -1,23 +1,23 @@
 # pylint: disable=consider-using-f-string
+import time
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
-import time
-from urllib.parse import unquote, quote
+from urllib.parse import quote, unquote
 
-from urllib3 import PoolManager
-from urllib3.util.retry import Retry
-from urllib3.response import HTTPResponse
 import pytest
+from urllib3 import PoolManager
+from urllib3.response import HTTPResponse
+from urllib3.util.retry import Retry
 
+import test_server
 from test_server import (
-    TestServer,
-    WaitTimeoutError,
-    TestServerError,
-    Response,
     Request,
     RequestNotProcessed,
+    Response,
+    TestServer,
+    TestServerError,
+    WaitTimeoutError,
 )
-import test_server
 
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
 
@@ -310,7 +310,8 @@ def test_file_uploading(server: TestServer) -> None:
             "image": ("emoji.png", b"zzz"),
         },
     )
-    assert server.get_request().files["image"][0]["name"] == "image"
+    img_file = server.get_request().files["image"][0]
+    assert img_file["name"] == "image"
 
 
 def test_callback_response_not_dict(server: TestServer) -> None:
@@ -382,23 +383,23 @@ def test_add_response_invalid_method(server: TestServer) -> None:
 def test_add_response_count_minus_one(server: TestServer) -> None:
     server.add_response(Response(), count=-1)
     for _ in range(3):
-        assert 200 == request(server.get_url()).status
+        assert request(server.get_url()).status == 200
 
 
 def test_add_response_count_one_default(server: TestServer) -> None:
     server.add_response(Response())
-    assert 200 == request(server.get_url()).status
+    assert request(server.get_url()).status == 200
     assert b"No response" in request(server.get_url()).data
 
     server.add_response(Response(), count=1)
-    assert 200 == request(server.get_url()).status
+    assert request(server.get_url()).status == 200
     assert b"No response" in request(server.get_url()).data
 
 
 def test_add_response_count_two(server: TestServer) -> None:
     server.add_response(Response(), count=2)
-    assert 200 == request(server.get_url()).status
-    assert 200 == request(server.get_url()).status
+    assert request(server.get_url()).status == 200
+    assert request(server.get_url()).status == 200
     assert b"No response" in request(server.get_url()).data
 
 
@@ -409,7 +410,7 @@ def test_raw_callback(server):
     server.add_response(Response(raw_callback=callback))
     res = request(server.get_url())
     assert "foo" in res.headers
-    assert b"hello" == res.data
+    assert res.data == b"hello"
 
 
 def test_raw_callback_invalid_type(server):

@@ -1,33 +1,53 @@
-.PHONY: build venv deps clean release check test docs
+.PHONY: bootstrap venv deps dirs clean test release mypy pylint flake8 bandit check build
 
-build: venv deps
+SHELL := /bin/bash
+FILES_CHECK_MYPY = test_server
+FILES_CHECK_ALL = $(FILES_CHECK_MYPY) tests
+
+bootstrap: venv deps dirs
 
 venv:
 	virtualenv -p python3 .env
 
 deps:
-	.env/bin/pip install -r requirements_dev.txt
+	.env/bin/pip install -r requirements.txt
+	.env/bin/pip install -e .
+
+dirs:
+	if [ ! -e var/run ]; then mkdir -p var/run; fi
+	if [ ! -e var/log ]; then mkdir -p var/log; fi
 
 clean:
 	find -name '*.pyc' -delete
 	find -name '*.swp' -delete
-	find -name __pycache__ -delete
-
-release:
-	git push; git push --tags; rm dist/*; python3 setup.py clean sdist; twine upload dist/*
-
-check:
-	python setup.py check -s \
-		&& pyroma --min 10 . \
-		&& pylint setup.py test_server tests \
-		&& flake8 setup.py test_server tests \
-		&& pytype setup.py test_server tests \
-		&& mypy setup.py test_server tests
+	find -name '__pycache__' -delete
 
 test:
-	coverage run -m pytest \
-		&& coverage report -m
+	tox -e py3-test
 
-docs:
-	rm -r docs/_build \
-		&& sphinx-build -b html docs docs/_build
+#release:
+#	git push \
+#	&& git push --tags \
+#	&& make build \
+#	&& twine upload dist/*
+
+mypy:
+	mypy --python-version=3.8 --strict $(FILES_CHECK_MYPY)
+
+pylint:
+	pylint -j0  $(FILES_CHECK_ALL)
+
+flake8:
+	flake8 -j auto --max-cognitive-complexity=17 $(FILES_CHECK_ALL)
+
+bandit:
+	bandit -qc pyproject.toml -r $(FILES_CHECK_ALL)
+
+check:
+	tox -e py3-check \
+	&& tox -e py38-check
+
+build:
+	rm -rf *.egg-info
+	rm -rf dist/*
+	python -m build --sdist

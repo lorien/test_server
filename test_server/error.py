@@ -8,21 +8,22 @@ __all__ = [
 
 
 class TestServerError(Exception):
-    """Base class for all errrors which belogns to test_server package"""
+    """Base class for all errrors raised by test_server package."""
+
+    __test__ = False  # for pytest ignore this class
 
 
 class WaitTimeoutError(TestServerError):
-    """Raised by wait_request method if it timed out waiting a request done"""
+    """Raised by wait_request method if timed out waiting a request done."""
 
 
 class InternalError(TestServerError):
-    """Raised when exception happens during the processing request sent by client"""
+    """Raised when exception happens during the processing a request sent by client."""
 
 
 class RequestNotProcessed(TestServerError):
-    """Raised by get_request method when no request has been processed"""
+    """Raised by get_request method when no request has been processed."""
 
 
 class NoResponse(TestServerError):
-    """Raised by get_response method when no response data is available
-    to hande the request"""
+    """Raised when no response data is configured to hande a request."""

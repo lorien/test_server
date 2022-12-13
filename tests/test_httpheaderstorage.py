@@ -54,11 +54,11 @@ def test_count_keys():
     obj = HttpHeaderStorage()
     obj.add("foo", "bar")
     obj.add("foo", "baz")
-    assert 1 == obj.count_keys()
+    assert obj.count_keys() == 1
 
 
 def test_count_items():
     obj = HttpHeaderStorage()
     obj.add("foo", "bar")
     obj.add("foo", "baz")
-    assert 2 == obj.count_items()
+    assert obj.count_items() == 2
