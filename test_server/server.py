@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import cgi
 import logging
 import time
 from collections import defaultdict
@@ -14,6 +13,8 @@ from socketserver import BaseRequestHandler, TCPServer, ThreadingMixIn
 from threading import Event, Thread
 from typing import Any, cast
 from urllib.parse import parse_qsl, urljoin
+
+from multipart import parse_form_data
 
 from .error import (
     InternalError,
@@ -107,36 +108,30 @@ class ThreadingTCPServer(ThreadingMixIn, TCPServer):
 
 class TestServerHandler(BaseHTTPRequestHandler):
     server: ThreadingTCPServer
-    # headers_buffer: List[str]
 
     def process_multipart_files(
         self, request_data: bytes, headers: Message
     ) -> Mapping[str, list[Mapping[str, Any]]]:
         if not headers.get("Content-Type", "").startswith("multipart/form-data;"):
             return {}
-        form = cgi.FieldStorage(
-            fp=BytesIO(request_data),
-            headers=self.headers,
-            environ={
-                "REQUEST_METHOD": "POST",
-                "CONTENT_TYPE": headers["Content-Type"],
-            },
-        )
+        env = {
+            "REQUEST_METHOD": "POST",
+            "CONTENT_TYPE": headers["Content-Type"],
+            "wsgi.input": BytesIO(request_data),
+        }
+        if "content-length" in headers:
+            env["content-length"] = headers["content-length"]
+        _, files = parse_form_data(env)
         ret: MutableMapping[str, list[Mapping[str, Any]]] = {}
-        for field_key in form.keys():  # pylint: disable=consider-using-dict-items
-            # Hello me! It is required to access forms field by using []
-            # I do not remember why. Do not use .items() here!
-            box = form[field_key]
-            for field in box if isinstance(box, list) else [box]:
-                ret.setdefault(field_key, []).append(
-                    {
-                        "name": field_key,
-                        # "raw_filename": None,
-                        "content_type": field.type,
-                        "filename": field.filename,
-                        "content": field.file.read(),
-                    }
-                )
+        for field_key, item in files.iterallitems():
+            ret.setdefault(field_key, []).append(
+                {
+                    "name": field_key,
+                    "content_type": item.content_type,
+                    "filename": item.filename,
+                    "content": item.raw,
+                }
+            )
         return ret
 
     def _read_request_data(self) -> bytes:
