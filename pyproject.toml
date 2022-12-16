@@ -79,6 +79,3 @@ load-plugins=[
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
-#addopts=--tb=short -m 'not bug'
-#markers =
-#    bug: run test that possibly fails

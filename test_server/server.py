@@ -3,9 +3,9 @@ from __future__ import annotations
 import cgi
 import logging
 import time
-import typing
 from collections import defaultdict
 from collections.abc import Callable, Mapping, MutableMapping
+from email.message import Message
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
 from io import BytesIO
@@ -65,23 +65,23 @@ class Response:
 class Request:  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
-        args: None | dict[str, Any] = None,
-        client_ip: None | str = None,
-        cookies: None | SimpleCookie[Any] = None,
-        data: None | bytes = None,
-        files: None | dict[str, Any] = None,
-        headers: None | HttpHeaderStream = None,
-        method: None | str = None,
-        path: None | str = None,
+        args: Mapping[str, Any],
+        client_ip: str,
+        cookies: SimpleCookie[Any],
+        data: bytes,
+        files: Mapping[str, Any],
+        headers: HttpHeaderStream,
+        method: str,
+        path: str,
     ):
-        self.args = {} if args is None else args
-        self.client_ip = {} if client_ip is None else client_ip
-        self.cookies: SimpleCookie[Any] = SimpleCookie() if cookies is None else cookies
-        self.data = None if data is None else data
-        self.files = {} if files is None else files
+        self.args = args
+        self.client_ip = client_ip
+        self.cookies = cookies
+        self.data = data
+        self.files = files
         self.headers = HttpHeaderStorage(headers)
-        self.method = None if method is None else method
-        self.path: str = "" if path is None else path
+        self.method = method
+        self.path = path
 
 
 VALID_METHODS: list[str] = ["get", "post", "put", "delete", "options", "patch"]
@@ -109,61 +109,59 @@ class TestServerHandler(BaseHTTPRequestHandler):
     server: ThreadingTCPServer
     # headers_buffer: List[str]
 
-    def _collect_request_data(self, method: str) -> Request:
-        data: MutableMapping[str, Any] = {
-            "args": {},
-            "headers": [],
-            "files": defaultdict(list),
-        }
-        data["client_ip"] = self.client_address[0]
+    def process_multipart_files(
+        self, request_data: bytes, headers: Message
+    ) -> Mapping[str, list[Mapping[str, Any]]]:
+        if not headers.get("Content-Type", "").startswith("multipart/form-data;"):
+            return {}
+        form = cgi.FieldStorage(
+            fp=BytesIO(request_data),
+            headers=self.headers,
+            environ={
+                "REQUEST_METHOD": "POST",
+                "CONTENT_TYPE": headers["Content-Type"],
+            },
+        )
+        ret: MutableMapping[str, list[Mapping[str, Any]]] = {}
+        for field_key in form.keys():  # pylint: disable=consider-using-dict-items
+            # Hello me! It is required to access forms field by using []
+            # I do not remember why. Do not use .items() here!
+            box = form[field_key]
+            for field in box if isinstance(box, list) else [box]:
+                ret.setdefault(field_key, []).append(
+                    {
+                        "name": field_key,
+                        # "raw_filename": None,
+                        "content_type": field.type,
+                        "filename": field.filename,
+                        "content": field.file.read(),
+                    }
+                )
+        return ret
+
+    def _read_request_data(self) -> bytes:
+        content_len: int = int(self.headers["Content-Length"] or "0")
+        return self.rfile.read(content_len)
+
+    def _parse_qs_args(self) -> Mapping[str, Any]:
         try:
             qs = self.path.split("?")[1]
         except IndexError:
             qs = ""
-        params = dict(parse_qsl(qs))
-        for key, val in params.items():
-            data["args"][key] = val
-        for key, val in self.headers.items():
-            data["headers"].append((key, val))
+        return dict(parse_qsl(qs))
 
-        path = self.path
-        data["path"] = path.split("?")[0]
-        data["method"] = method.upper()
-
-        data["cookies"] = SimpleCookie(self.headers["Cookie"])
-
-        clen = int(self.headers["Content-Length"] or "0")
-        request_data = self.rfile.read(clen)
-        data["data"] = request_data
-
-        ctype = self.headers["Content-Type"]
-        if ctype and ctype.split(";")[0] == "multipart/form-data":
-            form = cgi.FieldStorage(
-                fp=BytesIO(request_data),
-                # pylint: disable=deprecated-typing-alias
-                headers=cast(typing.MutableMapping[str, Any], self.headers),
-                # enable: disable=deprecated-typing-alias
-                environ={
-                    "REQUEST_METHOD": "POST",
-                    "CONTENT_TYPE": self.headers["Content-Type"],
-                },
-            )
-            for field_key in form.keys():  # pylint: disable=consider-using-dict-items
-                # Hello me! It is required to access forms field by using []
-                # I do not remember why. Do not use .items() here!
-                box = form[field_key]
-                for field in box if isinstance(box, list) else [box]:
-                    data["files"].setdefault(field_key, []).append(
-                        {
-                            "name": field_key,
-                            # "raw_filename": None,
-                            "content_type": field.type,
-                            "filename": field.filename,
-                            "content": field.file.read(),
-                        }
-                    )
-
-        return Request(**data)
+    def _collect_request_data(self, method: str) -> Request:
+        req_data = self._read_request_data()
+        return Request(
+            args=self._parse_qs_args(),
+            client_ip=self.client_address[0],
+            path=self.path.split("?")[0],
+            data=req_data,
+            method=method.upper(),
+            cookies=SimpleCookie(self.headers["Cookie"]),
+            files=self.process_multipart_files(req_data, self.headers),
+            headers=dict(self.headers),
+        )
 
     def process_callback_result(
         self, cb_res: Mapping[str, Any], result: HandlerResult
@@ -187,9 +185,17 @@ class TestServerHandler(BaseHTTPRequestHandler):
             else:
                 raise InternalError('Callback repsponse field "data" must be bytes')
 
+    def _process_required_response_headers(self, headers: HttpHeaderStorage) -> None:
+        port = self.server.test_server.port
+        headers.set("Listen-Port", str(port))
+        if "content-type" not in headers:
+            headers.set("Content-Type", "text/html; charset=utf-8")
+        if "server" not in headers:
+            headers.set("Server", "TestServer/%s" % TEST_SERVER_VERSION)
+
     def _request_handler(self) -> None:
         try:
-            test_srv = self.server.test_server  # pytype: disable=attribute-error
+            test_srv = self.server.test_server
             method = self.command.lower()
             resp = test_srv.get_response(method)
             if resp.sleep:
@@ -212,12 +218,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     result.data = data
                 else:
                     raise InternalError('Response parameter "data" must be bytes')
-            port = self.server.test_server.port  # pytype: disable=attribute-error
-            result.headers.set("Listen-Port", str(port))
-            if "content-type" not in result.headers:
-                result.headers.set("Content-Type", "text/html; charset=utf-8")
-            if "server" not in result.headers:
-                result.headers.set("Server", "TestServer/%s" % TEST_SERVER_VERSION)
+            self._process_required_response_headers(result.headers)
             self.write_response_data(result.status, result.headers, result.data)
         except Exception as ex:
             logging.exception("Unexpected error happend in test server request handler")

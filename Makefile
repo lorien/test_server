@@ -1,6 +1,5 @@
-.PHONY: bootstrap venv deps dirs clean test release mypy pylint flake8 bandit check build
+.PHONY: bootstrap venv deps dirs clean test release mypy pylint flake8 bandit check build coverage
 
-SHELL := /bin/bash
 FILES_CHECK_MYPY = test_server
 FILES_CHECK_ALL = $(FILES_CHECK_MYPY) tests
 
@@ -23,22 +22,22 @@ clean:
 	find -name '__pycache__' -delete
 
 test:
-	tox -e py3-test
+	pytest
 
-#release:
-#	git push \
-#	&& git push --tags \
-#	&& make build \
-#	&& twine upload dist/*
+release:
+	git push \
+	&& git push --tags \
+	&& make build \
+	&& twine upload dist/*
 
 mypy:
-	mypy --python-version=3.8 --strict $(FILES_CHECK_MYPY)
+	mypy --strict $(FILES_CHECK_MYPY)
 
 pylint:
-	pylint -j0  $(FILES_CHECK_ALL)
+	pylint -j0 $(FILES_CHECK_ALL)
 
 flake8:
-	flake8 -j auto --max-cognitive-complexity=17 $(FILES_CHECK_ALL)
+	flake8 -j auto --max-cognitive-complexity=11 $(FILES_CHECK_ALL)
 
 bandit:
 	bandit -qc pyproject.toml -r $(FILES_CHECK_ALL)
@@ -51,3 +50,6 @@ build:
 	rm -rf *.egg-info
 	rm -rf dist/*
 	python -m build --sdist
+
+coverage:
+	pytest --cov selection --cov-report term-missing
