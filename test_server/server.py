@@ -16,6 +16,7 @@ from urllib.parse import parse_qsl, urljoin
 
 from multipart import parse_form_data
 
+from .const import TEST_SERVER_PACKAGE_VERSION
 from .error import (
     InternalError,
     NoResponseError,
@@ -24,7 +25,6 @@ from .error import (
     WaitTimeoutError,
 )
 from .structure import HttpHeaderStorage, HttpHeaderStream
-from .version import TEST_SERVER_VERSION
 
 __all__: list[str] = ["TestServer", "WaitTimeoutError", "Response", "Request"]
 
@@ -186,7 +186,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         if "content-type" not in headers:
             headers.set("Content-Type", "text/html; charset=utf-8")
         if "server" not in headers:
-            headers.set("Server", "TestServer/%s" % TEST_SERVER_VERSION)
+            headers.set("Server", "TestServer/%s" % TEST_SERVER_PACKAGE_VERSION)
 
     def _request_handler(self) -> None:
         try:
