@@ -25,4 +25,4 @@ jobs:
 
     - name: Run tests
       run: |
-        make pytest
+        make test

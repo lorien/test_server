@@ -25,7 +25,7 @@ jobs:
 
     - name: Run tests
       run: |
-        make pytest
+        make test
         coverage lcov -o .coverage.lcov
 
     - name: Coveralls Parallel
