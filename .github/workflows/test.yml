@@ -20,12 +20,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        pip install -U -r requirements.txt
+        pip install -U -r requirements_dev.txt
         pip install -U -e .
 
     - name: Run tests
       run: |
-        pytest --cov test_server --cov-report term-missing
+        make pytest
         coverage lcov -o .coverage.lcov
 
     - name: Coveralls Parallel

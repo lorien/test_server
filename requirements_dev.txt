@@ -1,0 +1,21 @@
+sphinx
+tox
+mock
+bumpversion
+pytest
+build
+twine
+
+coverage
+coveralls
+pytest-cov
+pytest-xdist
+
+# Code Quality
+bandit[toml]
+flake8
+mccabe
+ruff
+mypy
+pep8-naming
+pylint

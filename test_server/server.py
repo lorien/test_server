@@ -74,7 +74,7 @@ class Request:  # pylint: disable=too-many-instance-attributes
         headers: HttpHeaderStream,
         method: str,
         path: str,
-    ):
+    ) -> None:
         self.args = args
         self.client_ip = client_ip
         self.cookies = cookies
@@ -202,7 +202,9 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 if isinstance(data, bytes):
                     self.write_raw_response_data(data)
                     return
-                raise InternalError("Raw callback must return bytes data")
+                raise InternalError(  # noqa: TRY301
+                    "Raw callback must return bytes data"
+                )
             if resp.callback:
                 self.process_callback_result(resp.callback(), result)
             else:
@@ -212,7 +214,9 @@ class TestServerHandler(BaseHTTPRequestHandler):
                 if isinstance(data, bytes):
                     result.data = data
                 else:
-                    raise InternalError('Response parameter "data" must be bytes')
+                    raise InternalError(  # noqa: TRY301
+                        'Response parameter "data" must be bytes'
+                    )
             self._process_required_response_headers(result.headers)
             self.write_response_data(result.status, result.headers, result.data)
         except Exception as ex:

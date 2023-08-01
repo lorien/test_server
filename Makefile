@@ -1,15 +1,15 @@
-.PHONY: bootstrap venv deps dirs clean test release mypy pylint flake8 bandit check build coverage
+.PHONY: init venv deps dirs clean test release ruff mypy pylint bandit check build coverage check-full
 
-FILES_CHECK_MYPY = test_server
-FILES_CHECK_ALL = $(FILES_CHECK_MYPY) tests
+FILES_CHECK_MYPY = test_server tests
+FILES_CHECK_ALL = $(FILES_CHECK_MYPY)
 
-bootstrap: venv deps dirs
+init: venv deps dirs
 
 venv:
 	virtualenv -p python3 .env
 
 deps:
-	.env/bin/pip install -r requirements.txt
+	.env/bin/pip install -r requirements_dev.txt
 	.env/bin/pip install -e .
 
 dirs:
@@ -21,8 +21,10 @@ clean:
 	find -name '*.swp' -delete
 	find -name '__pycache__' -delete
 
-test:
-	pytest --cov test_server --cov-report term-missing
+pytest:
+	pytest -n30 -x --cov test_server --cov-report term-missing
+
+test: pytest
 
 release:
 	git push \
@@ -36,15 +38,16 @@ mypy:
 pylint:
 	pylint -j0 $(FILES_CHECK_ALL)
 
-flake8:
-	flake8 -j auto --max-cognitive-complexity=11 $(FILES_CHECK_ALL)
-
 bandit:
 	bandit -qc pyproject.toml -r $(FILES_CHECK_ALL)
 
-check:
-	tox -e py3-check \
-	&& tox -e py38-check
+ruff:
+	ruff $(FILES_CHECK_ALL)
+
+check: ruff mypy pylint bandit
+
+check-full: check
+	tox -e check-minver
 
 build:
 	rm -rf *.egg-info

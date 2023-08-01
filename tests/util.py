@@ -1,23 +1,37 @@
+from __future__ import annotations
+
+from collections.abc import Generator
+from threading import Lock
+
 import pytest
+from typing_extensions import TypedDict
 
 from test_server import TestServer
 
-STATE = {"server": None}
+
+class CacheDict(TypedDict, total=False):
+    server: TestServer
+
+
+CACHE: CacheDict = {}
+CACHE_LOCK = Lock()
 
 
 @pytest.fixture(scope="session", name="global_server")
-def fixture_global_server():
-    if not STATE["server"]:
-        srv = TestServer()
-        srv.start()
-        STATE["server"] = srv
-    yield STATE["server"]
-    if STATE["server"]:
-        STATE["server"].stop()
-        STATE["server"] = None
+def fixture_global_server() -> Generator[TestServer, None, None]:
+    with CACHE_LOCK:
+        if "server" not in CACHE:
+            srv = TestServer()
+            srv.start()
+            CACHE["server"] = srv
+    yield CACHE["server"]
+    with CACHE_LOCK:
+        if CACHE["server"]:
+            CACHE["server"].stop()
+            del CACHE["server"]
 
 
-@pytest.fixture(scope="function", name="server")
-def fixture_server(global_server):
+@pytest.fixture(name="server")
+def fixture_server(global_server: TestServer) -> TestServer:
     global_server.reset()
     return global_server

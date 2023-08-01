@@ -1,12 +1,14 @@
-# pylint: disable=consider-using-f-string
+from __future__ import annotations
+
 import time
 from pprint import pprint  # pylint: disable=unused-import
 from threading import Thread
+from typing import Any
 from urllib.parse import quote, unquote
 
 import pytest
 from urllib3 import PoolManager
-from urllib3.response import HTTPResponse
+from urllib3.response import BaseHTTPResponse
 from urllib3.util.retry import Retry
 
 import test_server
@@ -18,18 +20,25 @@ from test_server import (
     TestServerError,
     WaitTimeoutError,
 )
+from test_server.server import INTERNAL_ERROR_RESPONSE_STATUS
 
 from .util import fixture_global_server, fixture_server  # pylint: disable=unused-import
 
 NETWORK_TIMEOUT = 1
 SPECIFIC_TEST_PORT = 10100
+HTTP_STATUS_OK = 200
 pool = PoolManager()
 
 
 def request(
-    url, data=None, method=None, headers=None, fields=None, retries_redirect=10
-) -> HTTPResponse:
-    params = {
+    url: str,
+    data: None | bytes = None,
+    method: None | str = None,
+    headers: None | dict[str, Any] = None,
+    fields: None | dict[str, Any] = None,
+    retries_redirect: int = 10,
+) -> BaseHTTPResponse:
+    params: dict[str, Any] = {
         "headers": headers,
         "timeout": NETWORK_TIMEOUT,
         "retries": Retry(
@@ -115,7 +124,7 @@ def test_response_once_reset_headers(server: TestServer) -> None:
     server.add_response(Response(headers=[("foo", "bar")]))
     server.reset()
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"No response" in res.data
 
 
@@ -154,7 +163,7 @@ def test_request_done(server: TestServer) -> None:
 def test_wait_request(server: TestServer) -> None:
     server.add_response(Response(data=b"foo"))
 
-    def worker():
+    def worker() -> None:
         time.sleep(1)
         request(server.get_url("?method=test-wait-request"))
 
@@ -245,7 +254,7 @@ def test_null_bytes(server: TestServer) -> None:
 
 
 def test_callback(server: TestServer) -> None:
-    def get_callback():
+    def get_callback() -> dict[str, Any]:
         return {
             "type": "response",
             "data": b"Hello",
@@ -254,7 +263,7 @@ def test_callback(server: TestServer) -> None:
             ],
         }
 
-    def post_callback():
+    def post_callback() -> dict[str, Any]:
         return {
             "type": "response",
             "status": 201,
@@ -276,13 +285,13 @@ def test_callback(server: TestServer) -> None:
     assert info.headers["method"] == "post"
     assert info.headers["set-cookie"] == "foo=bar"
     assert info.data == b"hey"
-    assert info.status == 201
+    assert info.status == 201  # noqa: PLR2004
 
 
 def test_response_data_invalid_type(server: TestServer) -> None:
-    server.add_response(Response(data=1))  # type: ignore
+    server.add_response(Response(data=1))  # type: ignore[arg-type]
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"must be bytes" in res.data
 
 
@@ -315,29 +324,29 @@ def test_file_uploading(server: TestServer) -> None:
 
 
 def test_callback_response_not_dict(server: TestServer) -> None:
-    def callback():
+    def callback() -> list[str]:
         return ["foo", "bar"]
 
-    server.add_response(Response(callback=callback))
+    server.add_response(Response(callback=callback))  # type: ignore[arg-type]
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"is not a dict" in res.data
 
 
 def test_callback_response_invalid_type(server: TestServer) -> None:
-    def callback():
+    def callback() -> dict[str, Any]:
         return {
             "foo": "bar",
         }
 
     server.add_response(Response(callback=callback))
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"invalid type key" in res.data
 
 
 def test_callback_response_invalid_key(server: TestServer) -> None:
-    def callback():
+    def callback() -> dict[str, Any]:
         return {
             "type": "response",
             "foo": "bar",
@@ -345,12 +354,12 @@ def test_callback_response_invalid_key(server: TestServer) -> None:
 
     server.add_response(Response(callback=callback))
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"contains invalid key" in res.data
 
 
 def test_callback_data_non_bytes(server: TestServer) -> None:
-    def callback():
+    def callback() -> dict[str, Any]:
         return {
             "type": "response",
             "data": "bar",
@@ -358,14 +367,14 @@ def test_callback_data_non_bytes(server: TestServer) -> None:
 
     server.add_response(Response(callback=callback))
     res = request(server.get_url())
-    assert res.status == 555
+    assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
     assert b"must be bytes" in res.data
 
 
 def test_invalid_response_key() -> None:
     with pytest.raises(TypeError) as ex:
         # pylint: disable=unexpected-keyword-arg
-        Response(foo="bar")  # type: ignore
+        Response(foo="bar")  # type: ignore[call-arg]
     assert "unexpected keyword argument" in str(ex.value)
 
 
@@ -383,28 +392,28 @@ def test_add_response_invalid_method(server: TestServer) -> None:
 def test_add_response_count_minus_one(server: TestServer) -> None:
     server.add_response(Response(), count=-1)
     for _ in range(3):
-        assert request(server.get_url()).status == 200
+        assert request(server.get_url()).status == HTTP_STATUS_OK
 
 
 def test_add_response_count_one_default(server: TestServer) -> None:
     server.add_response(Response())
-    assert request(server.get_url()).status == 200
+    assert request(server.get_url()).status == HTTP_STATUS_OK
     assert b"No response" in request(server.get_url()).data
 
     server.add_response(Response(), count=1)
-    assert request(server.get_url()).status == 200
+    assert request(server.get_url()).status == HTTP_STATUS_OK
     assert b"No response" in request(server.get_url()).data
 
 
 def test_add_response_count_two(server: TestServer) -> None:
     server.add_response(Response(), count=2)
-    assert request(server.get_url()).status == 200
-    assert request(server.get_url()).status == 200
+    assert request(server.get_url()).status == HTTP_STATUS_OK
+    assert request(server.get_url()).status == HTTP_STATUS_OK
     assert b"No response" in request(server.get_url()).data
 
 
-def test_raw_callback(server):
-    def callback():
+def test_raw_callback(server: TestServer) -> None:
+    def callback() -> bytes:
         return b"HTTP/1.0 200 OK\nFoo: Bar\nGaz: Baz\nContent-Length: 5\n\nhello"
 
     server.add_response(Response(raw_callback=callback))
@@ -413,22 +422,22 @@ def test_raw_callback(server):
     assert res.data == b"hello"
 
 
-def test_raw_callback_invalid_type(server):
-    def callback():
+def test_raw_callback_invalid_type(server: TestServer) -> None:
+    def callback() -> str:
         return "hey"
 
-    server.add_response(Response(raw_callback=callback))
+    server.add_response(Response(raw_callback=callback))  # type: ignore[arg-type]
     res = request(server.get_url())
     assert b"must return bytes" in res.data
 
 
-def test_request_property(server):
+def test_request_property(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url())
     assert isinstance(server.request, Request)
 
 
-def test_put_request(server):
+def test_put_request(server: TestServer) -> None:
     server.add_response(Response())
     request(server.get_url(), data=b"foo", method="put")
     assert server.request.method == "PUT"
