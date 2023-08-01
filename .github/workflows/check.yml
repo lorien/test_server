@@ -3,12 +3,12 @@ name: Code Quality
 on: ["push", "pull_request"]
 
 jobs:
-  build:
+  check:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python: ['3.8', '3.9', '3.10', '3.11', '3.12']
+        python: ['3.8', '3.9', '3.10', '3.11', '3.12-dev']
     steps:
 
     - uses: actions/checkout@v2
