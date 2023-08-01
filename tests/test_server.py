@@ -12,7 +12,7 @@ from urllib3.util.retry import Retry
 import test_server
 from test_server import (
     Request,
-    RequestNotProcessed,
+    RequestNotProcessedError,
     Response,
     TestServer,
     TestServerError,
@@ -370,7 +370,7 @@ def test_invalid_response_key() -> None:
 
 
 def test_get_request_no_request(server: TestServer) -> None:
-    with pytest.raises(RequestNotProcessed):
+    with pytest.raises(RequestNotProcessedError):
         server.get_request()
 
 

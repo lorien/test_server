@@ -18,8 +18,8 @@ from multipart import parse_form_data
 
 from .error import (
     InternalError,
-    NoResponse,
-    RequestNotProcessed,
+    NoResponseError,
+    RequestNotProcessedError,
     TestServerError,
     WaitTimeoutError,
 )
@@ -341,7 +341,7 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
         try:
             return self._requests[-1]
         except IndexError as ex:
-            raise RequestNotProcessed("Request has not been processed") from ex
+            raise RequestNotProcessedError("Request has not been processed") from ex
 
     @property
     def request(self) -> Request:
@@ -373,7 +373,7 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
                     scope = self._responses[None]
                     item = scope[0]
                 except IndexError as ex:
-                    raise NoResponse("No response available") from ex
+                    raise NoResponseError("No response available") from ex
             if item["count"] == -1:
                 return cast(Response, item["response"])
             item["count"] -= 1
