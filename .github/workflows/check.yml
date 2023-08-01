@@ -24,11 +24,11 @@ jobs:
         pip install -U -e .
 
     - name: Run ruff
-      if: ${{ matrix.python != '3.12-dev' }}
       run: |
         make ruff
 
     - name: Run pylint
+      if: ${{ matrix.python != '3.12-dev' }}
       run: |
         make pylint
 
