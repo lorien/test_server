@@ -23,6 +23,15 @@ jobs:
         pip install -U -r requirements_dev.txt
         pip install -U -e .
 
-    - name: Run tests
+    - name: Run ruff
+      if: ${{ matrix.python != '3.12-dev' }}
       run: |
-        make ruff && make pylint && make bandit
+        make ruff
+
+    - name: Run pylint
+      run: |
+        make pylint
+
+    - name: Run bandit
+      run: |
+        make bandit
