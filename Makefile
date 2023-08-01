@@ -24,7 +24,8 @@ clean:
 pytest:
 	pytest -n30 -x --cov test_server --cov-report term-missing
 
-test: pytest
+test:
+	pytest --cov test_server --cov-report term-missing
 
 release:
 	git push \
