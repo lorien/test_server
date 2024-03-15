@@ -68,7 +68,7 @@ class Request:  # pylint: disable=too-many-instance-attributes
         self,
         args: Mapping[str, Any],
         client_ip: str,
-        cookies: SimpleCookie[Any],
+        cookies: SimpleCookie,
         data: bytes,
         files: Mapping[str, Any],
         headers: HttpHeaderStream,
