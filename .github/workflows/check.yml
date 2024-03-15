@@ -28,7 +28,6 @@ jobs:
         make ruff
 
     - name: Run pylint
-      if: ${{ matrix.python != '3.12-dev' }}
       run: |
         make pylint
 
