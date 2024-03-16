@@ -24,9 +24,6 @@ from .error import (
 from .multipart import parse_content_header, parse_multipart_form
 from .structure import HttpHeaderStorage, HttpHeaderStream
 
-# from multipart import parse_form_data
-
-
 __all__: list[str] = ["TestServer", "WaitTimeoutError", "Response", "Request"]
 
 INTERNAL_ERROR_RESPONSE_STATUS: int = 555
