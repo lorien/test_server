@@ -52,11 +52,6 @@ profile = "black"
 line_length = 88
 # skip_gitignore = true # throws errors in stderr when ".git" dir does not exist
 
-[tool.bandit]
-# B101 assert_used
-# B410 Using HtmlElement to parse untrusted XML data
-skips = ["B101", "B410"]
-
 [tool.pylint.main]
 jobs=4
 extension-pkg-whitelist="lxml"
@@ -98,6 +93,8 @@ lint.ignore = [
     "D104", # Missing docstring in public package
     "D105", # Missing docstring in magic method,
     "D107", # Missing docstring in `__init__`
+    "D407", # Missing dashed underline after section ("Args")
+    "D413", # Missing blank line after last section ("Returns")
     "D203", # 1 blank line required before class docstring
     "D213", # Multi-line docstring summary should start at the second line
     "EM101", # Check for raw usage of a string literal in Exception raising

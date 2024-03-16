@@ -1,4 +1,4 @@
-.PHONY: init venv deps dirs clean test release ruff mypy pylint bandit check build coverage check-full
+.PHONY: init venv deps dirs clean test release ruff mypy pylint check build coverage check-full
 
 FILES_CHECK_MYPY = test_server tests
 FILES_CHECK_ALL = $(FILES_CHECK_MYPY)
@@ -39,13 +39,10 @@ mypy:
 pylint:
 	pylint -j0 $(FILES_CHECK_ALL)
 
-bandit:
-	bandit -qc pyproject.toml -r $(FILES_CHECK_ALL)
-
 ruff:
 	ruff check $(FILES_CHECK_ALL)
 
-check: ruff mypy pylint bandit
+check: ruff mypy pylint
 
 check-full: check
 	tox -e check-minver

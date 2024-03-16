@@ -7,14 +7,11 @@ from collections.abc import Callable, Mapping, MutableMapping
 from email.message import Message
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler
-from io import BytesIO
 from pprint import pprint  # pylint: disable=unused-import
 from socketserver import BaseRequestHandler, TCPServer, ThreadingMixIn
 from threading import Event, Thread
 from typing import Any, cast
 from urllib.parse import parse_qsl, urljoin
-
-from multipart import parse_form_data
 
 from .const import TEST_SERVER_PACKAGE_VERSION
 from .error import (
@@ -24,7 +21,11 @@ from .error import (
     TestServerError,
     WaitTimeoutError,
 )
+from .multipart import parse_content_header, parse_multipart_form
 from .structure import HttpHeaderStorage, HttpHeaderStream
+
+# from multipart import parse_form_data
+
 
 __all__: list[str] = ["TestServer", "WaitTimeoutError", "Response", "Request"]
 
@@ -114,22 +115,16 @@ class TestServerHandler(BaseHTTPRequestHandler):
     ) -> Mapping[str, list[Mapping[str, Any]]]:
         if not headers.get("Content-Type", "").startswith("multipart/form-data;"):
             return {}
-        env = {
-            "REQUEST_METHOD": "POST",
-            "CONTENT_TYPE": headers["Content-Type"],
-            "wsgi.input": BytesIO(request_data),
-        }
-        if "content-length" in headers:
-            env["content-length"] = headers["content-length"]
-        _, files = parse_form_data(env)
+        _content_type, options = parse_content_header(headers["Content-Type"])
+        files = parse_multipart_form(request_data, options.get("boundary", "").encode())
         ret: MutableMapping[str, list[Mapping[str, Any]]] = {}
-        for field_key, item in files.iterallitems():
+        for field_key, item in files.items():
             ret.setdefault(field_key, []).append(
                 {
                     "name": field_key,
-                    "content_type": item.content_type,
-                    "filename": item.filename,
-                    "content": item.raw,
+                    "content_type": item["content_type"],
+                    "filename": item["filename"],
+                    "content": item["content"],
                 }
             )
         return ret
