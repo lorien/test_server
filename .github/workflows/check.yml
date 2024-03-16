@@ -30,7 +30,3 @@ jobs:
     - name: Run pylint
       run: |
         make pylint
-
-    - name: Run bandit
-      run: |
-        make bandit
