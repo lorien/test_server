@@ -1,5 +1,4 @@
 sphinx
-tox
 mock
 bumpversion
 pytest
@@ -10,11 +9,15 @@ coverage
 coveralls
 pytest-cov
 pytest-xdist
+urllib3
+
+# py27 compat
+typing-extensions; python_version <= "2.7"
 
 # Code Quality
-flake8
-mccabe
-ruff
-mypy
-pep8-naming
 pylint
+
+# py3 env for mypy
+# mypy
+# types-urllib3
+# types-six

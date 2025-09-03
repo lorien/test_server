@@ -1,24 +1,25 @@
-from __future__ import annotations
+# from __future__ import annotations
 
-from collections.abc import Generator
 from threading import Lock
 
 import pytest
+from six.moves.collections_abc import Iterator
 from typing_extensions import TypedDict
 
 from test_server import TestServer
 
+# pylint: disable=invalid-name
+CacheDict = TypedDict("CacheDict", {"server": TestServer}, total=False)
+# pylint: enable=invalid-name
 
-class CacheDict(TypedDict, total=False):
-    server: TestServer
 
-
-CACHE: CacheDict = {}
+CACHE = {}  # type: CacheDict
 CACHE_LOCK = Lock()
 
 
 @pytest.fixture(scope="session", name="global_server")
-def fixture_global_server() -> Generator[TestServer, None, None]:
+def fixture_global_server():
+    # type: () -> Iterator[TestServer]
     with CACHE_LOCK:
         if "server" not in CACHE:
             srv = TestServer()
@@ -32,6 +33,7 @@ def fixture_global_server() -> Generator[TestServer, None, None]:
 
 
 @pytest.fixture(name="server")
-def fixture_server(global_server: TestServer) -> TestServer:
+def fixture_server(global_server):
+    # type: (TestServer) -> TestServer
     global_server.reset()
     return global_server

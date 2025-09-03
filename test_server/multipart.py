@@ -1,3 +1,4 @@
+# coding: utf-8
 """The contents of this file were adapted from sanic.
 
 MIT License
@@ -33,16 +34,21 @@ SOFTWARE.
 # * Use ValueError instead of ValidationException
 # * Do not use TypeDecoersSequences type
 # * Do not use typing.TYPE_CHECKING
+# Update from sep 03, 2025
+# Changes:
+# * Add python 2.7 compatibility
 # pylint: disable=too-many-locals
 
-from __future__ import annotations
+# from __future__ import annotations
 
 import re
 from collections import defaultdict
 from email.utils import decode_rfc2231
 from typing import Any  # TYPE_CHECKING
-from urllib.parse import unquote
 
+import six
+from six.moves.collections_abc import MutableMapping
+from six.moves.urllib.parse import unquote
 from typing_extensions import TypedDict
 
 # from litestar.datastructures.upload_file import UploadFile
@@ -54,20 +60,36 @@ __all__ = ("parse_body", "parse_content_header", "parse_multipart_form")
 # if TYPE_CHECKING:
 #    from litestar.types import TypeDecodersSequence
 
-_TOKEN = r"([\w!#$%&'*+\-.^_`|~]+)"  # noqa: S105
-_QUOTED = r'"([^"]*)"'
-_param = re.compile(rf";\s*{_TOKEN}=(?:{_TOKEN}|{_QUOTED})", re.ASCII)
-_firefox_quote_escape = re.compile(r'\\"(?!; |\s*$)')
+TOKEN = r"([\w!#$%&'*+\-.^_`|~]+)"  # noqa: S105
+QUOTED = r'"([^"]*)"'
+# ORIGINAL LINE: _param = re.compile(rf";\s*{_TOKEN}=(?:{_TOKEN}|{_QUOTED})", re.ASCII)
+# TODO: if re.A is necessary ?
+PARAM = re.compile(
+    r";\s*{token}=(?:{token}|{quoted})".format(token=TOKEN, quoted=QUOTED)
+)  # , re.A)
+FIREFOX_QUOTE_ESCAPE = re.compile(r'\\"(?!; |\s*$)')
 
 
-class UploadFile(TypedDict):
-    content_type: str
-    filename: str
-    content: bytes
-    headers: dict[str, str]
+UploadFile = TypedDict(  # pylint: disable=invalid-name
+    "UploadFile",
+    {
+        "content_type": str,
+        "filename": str,
+        "content": six.binary_type,
+        "headers": "MutableMapping[str, str]",
+    },
+)
+# class UploadFile(TypedDict):
+#    content_type: str
+#    filename: str
+#    content: bytes
+#    headers: dict[str, str]
 
 
-def parse_content_header(value: str) -> tuple[str, dict[str, str]]:
+def parse_content_header(
+    value,  # type: str
+):
+    # type: (...) -> tuple[str, dict[str, str]]
     """Parse content-type and content-disposition header values.
 
     Args:
@@ -76,22 +98,25 @@ def parse_content_header(value: str) -> tuple[str, dict[str, str]]:
     Returns:
         A tuple containing the normalized header string and a dictionary of parameters.
     """
-    value = _firefox_quote_escape.sub("%22", value)
+    value = FIREFOX_QUOTE_ESCAPE.sub("%22", value)
     pos = value.find(";")
     if pos == -1:
-        options: dict[str, str] = {}
+        options = {}  # type: dict[str, str]
     else:
         options = {
             m.group(1).lower(): m.group(2) or m.group(3).replace("%22", '"')
-            for m in _param.finditer(value[pos:])
+            for m in PARAM.finditer(value[pos:])
         }
         value = value[:pos]
     return value.strip().lower(), options
 
 
 def parse_body(
-    body: bytes, boundary: bytes, multipart_form_part_limit: int
-) -> list[bytes]:
+    body,  # type: bytes
+    boundary,  # type: bytes
+    multipart_form_part_limit,  # type: int
+):
+    # type: (...) -> list[bytes]
     """Split the body using the boundary.
 
     And validate the number of form parts is within the allowed limit.
@@ -111,20 +136,21 @@ def parse_body(
 
     if len(form_parts) > multipart_form_part_limit:
         raise ValueError(
-            f"Number of multipart components exceeds the allowed limit"
-            f" of {multipart_form_part_limit}, "
-            f"this potentially indicates a DoS attack"
+            "Number of multipart components exceeds the allowed limit"
+            " of %s, "
+            "this potentially indicates a DoS attack" % multipart_form_part_limit
         )
 
     return form_parts
 
 
 def parse_multipart_form(
-    body: bytes,
-    boundary: bytes,
-    multipart_form_part_limit: int = 1000,
-    # type_decoders: TypeDecodersSequence | None = None,
-) -> dict[str, Any]:
+    body,  # type: bytes
+    boundary,  # type: bytes
+    multipart_form_part_limit=1000,  # type: int
+    # type_decoders: TypeDecodersSequence | None = None
+):
+    # type: (...) -> dict[str, Any]
     """Parse multipart form data.
 
     Args:
@@ -136,7 +162,7 @@ def parse_multipart_form(
     Returns:
         A dictionary of parsed results.
     """
-    fields: defaultdict[str, list[Any]] = defaultdict(list)
+    fields = defaultdict(list)  # type: defaultdict[str, list[Any]]
 
     for form_part in parse_body(
         body=body,
@@ -149,7 +175,7 @@ def parse_multipart_form(
         field_name = None
         line_index = 2
         line_end_index = 0
-        headers: list[tuple[str, str]] = []
+        headers = []  # type: list[tuple[str, str]]
 
         while line_end_index != -1:
             line_end_index = form_part.find(b"\r\n", line_index)
@@ -170,9 +196,8 @@ def parse_multipart_form(
                 field_name = form_parameters.get("name")
                 file_name = form_parameters.get("filename")
 
-                if file_name is None and (
-                    filename_with_asterisk := form_parameters.get("filename*")
-                ):
+                filename_with_asterisk = form_parameters.get("filename*")
+                if file_name is None and filename_with_asterisk:
                     encoding, _, value = decode_rfc2231(filename_with_asterisk)
                     file_name = unquote(value, encoding=encoding or content_charset)
 
@@ -184,7 +209,7 @@ def parse_multipart_form(
         if field_name:
             post_data = form_part[line_index:-4].lstrip(b"\r\n")
             if file_name:
-                form_file = UploadFile(
+                form_file = UploadFile(  # pylint: disable=not-callable
                     content_type=content_type,
                     filename=file_name,
                     content=post_data,

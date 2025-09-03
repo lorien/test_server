@@ -19,3 +19,4 @@
 /.coverage*
 /docs/_build
 /.pytest_cache/
+/test.py

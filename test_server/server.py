@@ -1,17 +1,19 @@
-from __future__ import annotations
+# from __future__ import annotations
 
 import logging
 import time
 from collections import defaultdict
-from collections.abc import Callable, Mapping, MutableMapping
 from email.message import Message
-from http.cookies import SimpleCookie
-from http.server import BaseHTTPRequestHandler
 from pprint import pprint  # pylint: disable=unused-import
-from socketserver import BaseRequestHandler, TCPServer, ThreadingMixIn
 from threading import Event, Thread
 from typing import Any, cast
-from urllib.parse import parse_qsl, urljoin
+
+import six
+from six.moves.BaseHTTPServer import BaseHTTPRequestHandler
+from six.moves.collections_abc import Callable, Mapping, MutableMapping
+from six.moves.http_cookies import SimpleCookie
+from six.moves.socketserver import BaseRequestHandler, TCPServer, ThreadingMixIn
+from six.moves.urllib.parse import parse_qsl, urljoin
 
 from .const import TEST_SERVER_PACKAGE_VERSION
 from .error import (
@@ -24,35 +26,37 @@ from .error import (
 from .multipart import parse_content_header, parse_multipart_form
 from .structure import HttpHeaderStorage, HttpHeaderStream
 
-__all__: list[str] = ["TestServer", "WaitTimeoutError", "Response", "Request"]
+__all__ = ["TestServer", "WaitTimeoutError", "Response", "Request"]  # type: list[str]
 
-INTERNAL_ERROR_RESPONSE_STATUS: int = 555
+INTERNAL_ERROR_RESPONSE_STATUS = 555  # type: int
 
 
-class HandlerResult:
+class HandlerResult(object):
     __slots__ = ["status", "headers", "data"]
 
     def __init__(
         self,
-        status: None | int = None,
-        headers: None | HttpHeaderStorage = None,
-        data: None | bytes = None,
-    ) -> None:
+        status=None,  # type: None | int
+        headers=None,  # type: None | HttpHeaderStorage
+        data=None,  # type: None | bytes
+    ):
+        # type: (...) -> None
         self.status = status if status is not None else 200
         self.headers = headers if headers else HttpHeaderStorage()
         self.data = data if data else b""
 
 
-class Response:
+class Response(object):
     def __init__(
         self,
-        callback: None | Callable[..., Mapping[str, Any]] = None,
-        raw_callback: None | Callable[..., bytes] = None,
-        data: None | bytes = None,
-        headers: None | HttpHeaderStream = None,
-        sleep: None | float = None,
-        status: None | int = None,
-    ) -> None:
+        callback=None,  # type: None | Callable[..., Mapping[str, Any]]
+        raw_callback=None,  # type: None | Callable[..., bytes]
+        data=None,  # type: None | bytes
+        headers=None,  # type: None | HttpHeaderStream
+        sleep=None,  # type: None | float
+        status=None,  # type: None | int
+    ):
+        # type: (...) -> None
         self.callback = callback
         self.raw_callback = raw_callback
         self.data = b"" if data is None else data
@@ -61,18 +65,19 @@ class Response:
         self.status = 200 if status is None else status
 
 
-class Request:  # pylint: disable=too-many-instance-attributes
+class Request(object):  # pylint: disable=too-many-instance-attributes
     def __init__(
         self,
-        args: Mapping[str, Any],
-        client_ip: str,
-        cookies: SimpleCookie,
-        data: bytes,
-        files: Mapping[str, Any],
-        headers: HttpHeaderStream,
-        method: str,
-        path: str,
-    ) -> None:
+        args,  # type: Mapping[str, Any]
+        client_ip,  # type: str
+        cookies,  # type: SimpleCookie
+        data,  # type: bytes
+        files,  # type: Mapping[str, Any]
+        headers,  # type: HttpHeaderStream
+        method,  # type: str
+        path,  # type: str
+    ):
+        # type: (...) -> None
         self.args = args
         self.client_ip = client_ip
         self.cookies = cookies
@@ -83,38 +88,48 @@ class Request:  # pylint: disable=too-many-instance-attributes
         self.path = path
 
 
-VALID_METHODS: list[str] = ["get", "post", "put", "delete", "options", "patch"]
+VALID_METHODS = ["get", "post", "put", "delete", "options", "patch"]  # type: list[str]
 
 
 class ThreadingTCPServer(ThreadingMixIn, TCPServer):
-    allow_reuse_address: bool = True
-    started: bool = False
+    allow_reuse_address = True  # type: bool
+    started = False  # type: bool
 
+    # fmt: off
     def __init__(
         self,
-        server_address: tuple[str, int],
-        request_handler_class: Callable[
-            [Any, Any, ThreadingTCPServer], BaseRequestHandler
-        ],
-        test_server: TestServer,
-        **kwargs: Any,
-    ) -> None:
-        super().__init__(server_address, request_handler_class, **kwargs)
+        server_address,  # type: tuple[str, int]
+        # pylint: disable=line-too-long
+        request_handler_class,  # type: Callable[[Any, Any, ThreadingTCPServer], BaseRequestHandler]
+        # pylint: enable=line-too-long
+        test_server,  # type: TestServer
+        **kwargs # type: Any
+    ):
+    # fmt: on
+        # type: (...) -> None
+        TCPServer.__init__(self, server_address, request_handler_class, **kwargs)
         self.test_server = test_server
         self.test_server.server_started.set()
 
 
 class TestServerHandler(BaseHTTPRequestHandler):
-    server: ThreadingTCPServer
+    def __init__(self, request, client_address, server):
+        # type: (Any, Any, ThreadingTCPServer) -> None
+        BaseHTTPRequestHandler.__init__(self, request, client_address, server)
+        # This assignment is only to ceclare type of self.server attribute
+        self.server = server  # type: ThreadingTCPServer
 
     def process_multipart_files(
-        self, request_data: bytes, headers: Message
-    ) -> Mapping[str, list[Mapping[str, Any]]]:
+        self,
+        request_data,  # type: bytes
+        headers,  # type: Message
+    ):
+        # type: (...) -> Mapping[str, list[Mapping[str, Any]]]
         if not headers.get("Content-Type", "").startswith("multipart/form-data;"):
             return {}
         _content_type, options = parse_content_header(headers["Content-Type"])
         files = parse_multipart_form(request_data, options.get("boundary", "").encode())
-        ret: MutableMapping[str, list[Mapping[str, Any]]] = {}
+        ret = {}  # type: MutableMapping[str, list[Mapping[str, Any]]]
         for field_key, item in files.items():
             ret.setdefault(field_key, []).append(
                 {
@@ -126,18 +141,26 @@ class TestServerHandler(BaseHTTPRequestHandler):
             )
         return ret
 
-    def _read_request_data(self) -> bytes:
-        content_len: int = int(self.headers["Content-Length"] or "0")
+    def _read_request_data(self):
+        # type: () -> bytes
+        content_len = int(
+            self.headers.getheader("Content-Length", "0")  # type: ignore[attr-defined]
+        )  # type: int
         return self.rfile.read(content_len)
 
-    def _parse_qs_args(self) -> Mapping[str, Any]:
+    def _parse_qs_args(self):
+        # type: () -> Mapping[str, Any]
         try:
             qs = self.path.split("?")[1]
         except IndexError:
             qs = ""
         return dict(parse_qsl(qs))
 
-    def _collect_request_data(self, method: str) -> Request:
+    def _collect_request_data(
+        self,
+        method,  # type: str
+    ):
+        # type: (...) -> Request
         req_data = self._read_request_data()
         return Request(
             args=self._parse_qs_args(),
@@ -145,14 +168,19 @@ class TestServerHandler(BaseHTTPRequestHandler):
             path=self.path.split("?")[0],
             data=req_data,
             method=method.upper(),
-            cookies=SimpleCookie(self.headers["Cookie"]),
+            cookies=SimpleCookie(
+                self.headers.getheader("Cookie", "")  # type: ignore[attr-defined]
+            ),
             files=self.process_multipart_files(req_data, self.headers),
             headers=dict(self.headers),
         )
 
     def process_callback_result(
-        self, cb_res: Mapping[str, Any], result: HandlerResult
-    ) -> None:
+        self,
+        cb_res,  # type: Mapping[str, Any]
+        result,  # type: HandlerResult
+    ):
+        # type: (...) -> None
         if not isinstance(cb_res, dict):
             raise InternalError("Callback response is not a dict")
         if cb_res.get("type") != "response":
@@ -172,7 +200,11 @@ class TestServerHandler(BaseHTTPRequestHandler):
             else:
                 raise InternalError('Callback repsponse field "data" must be bytes')
 
-    def _process_required_response_headers(self, headers: HttpHeaderStorage) -> None:
+    def _process_required_response_headers(
+        self,
+        headers,  # type: HttpHeaderStorage
+    ):
+        # type: (...) -> None
         port = self.server.test_server.port
         headers.set("Listen-Port", str(port))
         if "content-type" not in headers:
@@ -180,7 +212,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
         if "server" not in headers:
             headers.set("Server", "TestServer/%s" % TEST_SERVER_PACKAGE_VERSION)
 
-    def _request_handler(self) -> None:
+    def _request_handler(self):
+        # type: () -> None
         try:
             test_srv = self.server.test_server
             method = self.command.lower()
@@ -221,28 +254,47 @@ class TestServerHandler(BaseHTTPRequestHandler):
         finally:
             test_srv.num_req_processed += 1
 
-    def write_response_data(
-        self, status: int, headers: HttpHeaderStorage, data: bytes
-    ) -> None:
+    def write_response_data(self, status, headers, data):
+        # type: (int, HttpHeaderStorage, six.binary_type) -> None
         self.send_response(status)
         for key, val in headers.items():
             self.send_header(key, val)
         self.end_headers()
         self.wfile.write(data)
 
-    def write_raw_response_data(self, data: bytes) -> None:
+    def write_raw_response_data(
+        self,
+        data,  # type: bytes
+    ):
+        # type: (...) -> None
         self.wfile.write(data)
         # pylint: disable=attribute-defined-outside-init
-        self._headers_buffer: list[str] = []
+        self._headers_buffer = []  # type: list[str]
 
     # https://github.com/python/cpython/blob/main/Lib/http/server.py
-    def send_response(self, code: int, message: None | str = None) -> None:
+    def send_response(
+        self,
+        code,  # type: int
+        message=None,  # type: None | str
+    ):
+        # type: (...) -> None
         """Do not send Server and Date headers.
 
         This method overrides standard method from super class.
         """
         self.log_request(code)
         self.send_response_only(code, message)
+
+    def send_response_only(self, code, message=None):
+        # type: (int, None|str) -> None
+        if message is None:
+            message = self.responses[code][0] if code in self.responses else ""
+        if self.request_version != "HTTP/0.9":
+            # fmt: off
+            self.wfile.write((u"%s %d %s\r\n" % (
+                self.protocol_version, code, message)).encode("latin")
+            )
+            # fmt: on
 
     do_GET = _request_handler  # noqa: N815
     do_POST = _request_handler  # noqa: N815
@@ -252,25 +304,31 @@ class TestServerHandler(BaseHTTPRequestHandler):
     do_PATCH = _request_handler  # noqa: N815
 
 
-class TestServer:  # pylint: disable=too-many-instance-attributes
+class TestServer(object):  # pylint: disable=too-many-instance-attributes
     __test__ = False  # for pytest ignore this class
 
-    def __init__(self, address: str = "127.0.0.1", port: int = 0) -> None:
-        self.server_started: Event = Event()
-        self._requests: list[Request] = []
-        self._responses: MutableMapping[
-            None | str, list[MutableMapping[str, Any]]
-        ] = defaultdict(list)
-        self.port: None | int = None
-        self._config_port: int = port
-        self.address: str = address
-        self._thread: None | Thread = None
-        self._server: None | ThreadingTCPServer = None
-        self._started: Event = Event()
-        self.num_req_processed: int = 0
+    def __init__(
+        self,
+        address="127.0.0.1",  # type: str
+        port=0,  # type: int
+    ):
+        # type: (...) -> None
+        self.server_started = Event()  # type: Event
+        self._requests = []  # type: list[Request]
+        self._responses = defaultdict(
+            list
+        )  # type: MutableMapping[None | str, list[MutableMapping[str, Any]]]
+        self.port = None  # type: None | int
+        self._config_port = port  # type: int
+        self.address = address  # type: str
+        self._thread = None  # type: None | Thread
+        self._server = None  # type: None | ThreadingTCPServer
+        self._started = Event()  # type: Event
+        self.num_req_processed = 0  # type: int
         self.reset()
 
-    def _thread_server(self) -> None:
+    def _thread_server(self):
+        # type: () -> None
         """Ask HTTP server start processing requests.
 
         This function is supposed to be run in separate thread.
@@ -284,15 +342,25 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
     # Public Interface
     # ****************
 
-    def add_request(self, req: Request) -> None:
+    def add_request(
+        self,
+        req,  # type: Request
+    ):
+        # type: (...) -> None
         self._requests.append(req)
 
-    def reset(self) -> None:
+    def reset(self):
+        # type: () -> None
         self.num_req_processed = 0
-        self._requests.clear()
+        # self._requests.clear()
+        del self._requests[:]
         self._responses.clear()
 
-    def start(self, daemon: bool = True) -> None:
+    def start(
+        self,
+        daemon=True,  # type: bool
+    ):
+        # type: (...) -> None
         """Start the HTTP server."""
         self._thread = Thread(
             target=self._thread_server,
@@ -302,27 +370,38 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
         self.wait_server_started()
         self.port = cast(ThreadingTCPServer, self._server).socket.getsockname()[1]
 
-    def wait_server_started(self) -> None:
+    def wait_server_started(self):
+        # type: () -> None
         # I could not foind another way
         # to handle multiple socket issues
         # other than taking some sleep
         time.sleep(0.01)
         self.server_started.wait()
 
-    def stop(self) -> None:
+    def stop(self):
+        # type: () -> None
         if self._server:
             self._server.shutdown()
             self._server.server_close()
 
-    def get_url(self, path: str = "", port: None | int = None) -> str:
+    def get_url(
+        self,
+        path="",  # type: str
+        port=None,  # type: None | int
+    ):
+        # type: (...) -> str
         """Build URL that is served by HTTP server."""
         if port is None:
             port = cast(int, self.port)
         return urljoin("http://%s:%d" % (self.address, port), path)
 
-    def wait_request(self, timeout: float) -> None:
+    def wait_request(
+        self,
+        timeout,  # type: float
+    ):
+        # type: (...) -> None
         """Stupid implementation that eats CPU."""
-        start: float = time.time()
+        start = time.time()  # type: float
         while True:
             if self.num_req_processed:
                 break
@@ -330,22 +409,30 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
             if time.time() - start > timeout:
                 raise WaitTimeoutError("No request processed in %d seconds" % timeout)
 
-    def request_is_done(self) -> bool:
+    def request_is_done(self):
+        # type: () -> bool
         return self.num_req_processed > 0
 
-    def get_request(self) -> Request:
+    def get_request(self):
+        # type: () -> Request
         try:
             return self._requests[-1]
-        except IndexError as ex:
-            raise RequestNotProcessedError("Request has not been processed") from ex
+        except IndexError:
+            # TODO: from ex
+            raise RequestNotProcessedError("Request has not been processed")
 
     @property
-    def request(self) -> Request:
+    def request(self):
+        # type: () -> Request
         return self.get_request()
 
     def add_response(
-        self, resp: Response, count: int = 1, method: None | str = None
-    ) -> None:
+        self,
+        resp,  # type: Response
+        count=1,  # type: int
+        method=None,  # type: None | str
+    ):
+        # type: (...) -> None
         assert method is None or isinstance(method, str)
         assert count < 0 or count > 0
         if method and method not in VALID_METHODS:
@@ -357,7 +444,11 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
             },
         )
 
-    def get_response(self, method: str) -> Response:
+    def get_response(
+        self,
+        method,  # type: str
+    ):
+        # type: (...) -> Response
         while True:
             item = None
             scope = None
@@ -368,8 +459,9 @@ class TestServer:  # pylint: disable=too-many-instance-attributes
                 try:
                     scope = self._responses[None]
                     item = scope[0]
-                except IndexError as ex:
-                    raise NoResponseError("No response available") from ex
+                except IndexError:
+                    # TODO: from ex
+                    raise NoResponseError("No response available")
             if item["count"] == -1:
                 return cast(Response, item["response"])
             item["count"] -= 1

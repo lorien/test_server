@@ -4,7 +4,7 @@ name = "test_server"
 version = "0.0.43"
 description = "Server for testing HTTP clients"
 readme = "README.md"
-requires-python = ">=3.8"
+requires-python = ">=2.7"
 license = {"file" = "LICENSE"}
 keywords = ["test", "testing", "server", "http server"]
 authors = [
@@ -13,6 +13,17 @@ authors = [
 # https://pypi.org/pypi?%3Aaction=list_classifiers
 classifiers = [
     "Typing :: Typed",
+    "Programming Language :: Python :: 2",
+    "Programming Language :: Python :: 2.7",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.0",
+    "Programming Language :: Python :: 3.1",
+    "Programming Language :: Python :: 3.2",
+    "Programming Language :: Python :: 3.3",
+    "Programming Language :: Python :: 3.4",
+    "Programming Language :: Python :: 3.5",
+    "Programming Language :: Python :: 3.6",
+    "Programming Language :: Python :: 3.7",
     "Programming Language :: Python :: 3.8",
     "Programming Language :: Python :: 3.9",
     "Programming Language :: Python :: 3.10",
@@ -26,7 +37,9 @@ classifiers = [
     "Topic :: Software Development :: Libraries :: Python Modules",
     "Topic :: Internet :: WWW/HTTP",
 ]
-dependencies = []
+dependencies = [
+    'typing-extensions; python_version <= "2.7"'
+]
 
 [project.optional-dependencies]
 
@@ -52,28 +65,8 @@ profile = "black"
 line_length = 88
 # skip_gitignore = true # throws errors in stderr when ".git" dir does not exist
 
-[tool.pylint.main]
-jobs=4
-extension-pkg-whitelist="lxml"
-disable="missing-docstring,broad-except,too-few-public-methods,consider-using-f-string,fixme"
-variable-rgx="[a-z_][a-z0-9_]{1,30}$"
-attr-rgx="[a-z_][a-z0-9_]{1,30}$"
-argument-rgx="[a-z_][a-z0-9_]{1,30}$"
-max-line-length=88
-max-args=9
-load-plugins=[
-    "pylint.extensions.check_elif",
-    "pylint.extensions.comparison_placement",
-    "pylint.extensions.consider_ternary_expression",
-    "pylint.extensions.docstyle",
-    "pylint.extensions.for_any_all",
-    "pylint.extensions.overlapping_exceptions",
-    "pylint.extensions.redefined_loop_name",
-    "pylint.extensions.redefined_variable_type",
-    "pylint.extensions.set_membership",
-    "pylint.extensions.typing",
-
-]
+# pylint 1.9.5 can not load config from pyproject
+# [tool.pylint.main]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -81,6 +74,21 @@ testpaths = ["tests"]
 [tool.ruff]
 lint.select = ["ALL"]
 lint.ignore = [
+    # py27 compat begins
+    "ANN001", # Missing type annotation for function argument
+    "ANN201", # Missing return type annotation for public function
+    "ANN003", # Missing type annotation for `**kwargs`
+    "ANN202", # Missing return type annotation for private function
+    "ANN204", # Missing return type annotation for special method
+    "TRY200", # Use `raise from` to specify exception cause
+    "B904", # Within an `except` clause, raise exceptions with `raise ... from err`
+    "UP025", # Remove unicode literals from strings
+    "UP004", # Class inherits from `object`
+    # or `raise ... from None` to distinguish them from errors in exception handling
+    "UP009", # UTF-8 encoding declaration is unnecessary
+    "UP035", # Import from `collections.abc` instead
+    "UP013", # Convert from `TypedDict` functional to class syntax
+    # py27 compat ends
     "A003", # Class attribute `type` is shadowing a python builtin
     "ANN101", # Missing type annotation for `self` in method
     "ANN401", # Dynamically typed expressions (typing.Any) are disallowed
@@ -122,5 +130,5 @@ lint.ignore = [
     "RUF100", # [*] Unused `noqa` directive
 ]
 lint.pylint.max-args=9
-target-version = "py38"
+target-version = "py37"
 extend-exclude = ["var"]

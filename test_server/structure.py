@@ -1,23 +1,24 @@
-from __future__ import annotations
+# from __future__ import annotations
 
 import typing
 from collections import OrderedDict
-from collections.abc import Iterator, MutableMapping
 from pprint import pprint  # pylint: disable=unused-import
 from typing import Any, Tuple, Union, cast
+
+from six.moves.collections_abc import Iterator, MutableMapping
 
 __all__ = ["HttpHeaderStorage"]
 
 
-# pylint: disable=deprecated-typing-alias,consider-alternative-union-syntax
+# pylint: disable=deprecated-typing-alias,consider-alternative-union-syntax,invalid-name
 HttpHeaderStream = Union[
     typing.Mapping[str, str],
     typing.Iterable[Tuple[str, str]],
 ]
-# pylint: enable=deprecated-typing-alias,consider-alternative-union-syntax
+# pylint: enable=deprecated-typing-alias,consider-alternative-union-syntax,invalid-name
 
 
-class HttpHeaderStorage:
+class HttpHeaderStorage(object):
     """Storage for HTTP Headers.
 
     The storage maps string keys to one or multiple string values.
@@ -25,33 +26,42 @@ class HttpHeaderStorage:
     """
 
     def __init__(
-        self, data: None | HttpHeaderStream = None, charset: str = "utf-8"
-    ) -> None:
-        self._store: MutableMapping[str, list[str]] = OrderedDict()
+        self,
+        data=None,  # type: None | HttpHeaderStream
+        charset="utf-8",  # type: str
+    ):
+        # type: (...) -> None
+        self._store = OrderedDict()  # type: MutableMapping[str, list[str]]
         self._charset = charset
         if data is not None:
             self.extend(data)
 
     # Public Interface
 
-    def set(self, key: str, value: str) -> None:
+    def set(self, key, value):
+        # type: (str, str) -> None
         # Store original case of key
         self._store[key.lower()] = [key, value]
 
-    def get(self, key: str) -> str:
+    def get(self, key):
+        # type: (str) -> str
         return self._store[key.lower()][1]
 
-    def getlist(self, key: str) -> list[str]:
+    def getlist(self, key):
+        # type: (str) -> list[str]
         return self._store[key.lower()][1:]
 
-    def remove(self, key: str) -> None:
+    def remove(self, key):
+        # type: (str) -> None
         del self._store[key.lower()]
 
-    def add(self, key: str, value: str) -> None:
+    def add(self, key, value):
+        # type: (str, str) -> None
         box = self._store.setdefault(key.lower(), [key])
         box.append(value)
 
-    def extend(self, data: HttpHeaderStream) -> None:
+    def extend(self, data):
+        # type: (HttpHeaderStream) -> None
         seq = (
             data.items()
             if isinstance(data, MutableMapping)
@@ -62,21 +72,26 @@ class HttpHeaderStorage:
         for key, val in seq:
             self.add(key, val)
 
-    def __contains__(self, key: str) -> bool:
+    def __contains__(self, key):
+        # type: (str) -> bool
         return key.lower() in self._store
 
-    def count_keys(self) -> int:
+    def count_keys(self):
+        # type: () -> int
         return len(self._store.keys())
 
-    def count_items(self) -> int:
+    def count_items(self):
+        # type: () ->  int
         return sum(1 for _ in self.items())
 
-    def items(self) -> Iterator[tuple[str, Any]]:
+    def items(self):
+        # type: () -> Iterator[tuple[str, Any]]
         for items in self._store.values():
             original_key = items[0]
             for idx, item in enumerate(items):
                 if idx > 0:
                     yield original_key, item
 
-    def __repr__(self) -> str:
+    def __repr__(self):
+        # type: () -> str
         return str(list(self.items()))
