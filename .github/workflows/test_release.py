@@ -7,16 +7,24 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest, windows-latest]
-        python: ['3.8', '3.9', '3.10', '3.11', '3.12', '3.13-dev']
+        os: [ubuntu-latest, windows-latest]
+        python: [2.7, 3.13]
     steps:
 
     - uses: actions/checkout@v2
 
-    - name: Set up Python ${{ matrix.python }}
+    - name: Install python ${{ matrix.python }} with LisardByte/setup_python action
+      if: matrix.python <= 2.7
+      uses: LizardByte/actions/actions/setup_python@master
+      with:
+        python-version: ${{ matrix.python }}
+
+    - name: Install python ${{ matrix.python }} with standard setup-python action
+      if: matrix.python > 2.7
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python }}
+
 
     - name: Install dependencies
       run: |
