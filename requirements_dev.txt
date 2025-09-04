@@ -17,5 +17,6 @@ six
 
 ruff; python_version >= "3.0"
 mypy; python_version >= "3.0"
+pylint; python_version >= "3.0"
 types-urllib3; python_version >= "3.0"
 types-six; python_version >= "3.0"
