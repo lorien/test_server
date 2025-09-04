@@ -10,7 +10,11 @@ from typing import Any, cast
 
 import six
 from six.moves.BaseHTTPServer import BaseHTTPRequestHandler
+
+# pylint: disable=import-error
 from six.moves.collections_abc import Callable, Mapping, MutableMapping
+
+# pylint: enable=import-error
 from six.moves.http_cookies import SimpleCookie
 from six.moves.socketserver import BaseRequestHandler, TCPServer, ThreadingMixIn
 from six.moves.urllib.parse import parse_qsl, urljoin
@@ -26,13 +30,13 @@ from .error import (
 from .multipart import parse_content_header, parse_multipart_form
 from .structure import HttpHeaderStorage, HttpHeaderStream
 
-__all__ = ["TestServer", "WaitTimeoutError", "Response", "Request"]  # type: list[str]
-
+__all__ = ["Request", "Response", "TestServer", "WaitTimeoutError"]  # type: list[str]
+LOG = logging.getLogger()
 INTERNAL_ERROR_RESPONSE_STATUS = 555  # type: int
 
 
 class HandlerResult(object):
-    __slots__ = ["status", "headers", "data"]
+    __slots__ = ["data", "headers", "status"]
 
     def __init__(
         self,
@@ -185,11 +189,15 @@ class TestServerHandler(BaseHTTPRequestHandler):
             raise InternalError("Callback response is not a dict")
         if cb_res.get("type") != "response":
             raise InternalError(
-                "Callback response has invalid type key: %s" % cb_res.get("type", "NA")
+                "Callback response has invalid type key: {}".format(
+                    cb_res.get("type", "NA")
+                )
             )
         for key in cb_res:
             if key not in ("type", "status", "headers", "data"):
-                raise InternalError("Callback response contains invalid key: %s" % key)
+                raise InternalError(
+                    "Callback response contains invalid key: {}".format(key)
+                )
         if "status" in cb_res:
             result.status = cb_res["status"]
         if "headers" in cb_res:
@@ -210,7 +218,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
         if "content-type" not in headers:
             headers.set("Content-Type", "text/html; charset=utf-8")
         if "server" not in headers:
-            headers.set("Server", "TestServer/%s" % TEST_SERVER_PACKAGE_VERSION)
+            headers.set("Server", "TestServer/{}".format(TEST_SERVER_PACKAGE_VERSION))
 
     def _request_handler(self):
         # type: () -> None
@@ -245,7 +253,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             self._process_required_response_headers(result.headers)
             self.write_response_data(result.status, result.headers, result.data)
         except Exception as ex:
-            logging.exception("Unexpected error happend in test server request handler")
+            LOG.exception("Unexpected error happend in test server request handler")
             self.write_response_data(
                 INTERNAL_ERROR_RESPONSE_STATUS,
                 HttpHeaderStorage(),
@@ -291,7 +299,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             message = self.responses[code][0] if code in self.responses else ""
         if self.request_version != "HTTP/0.9":
             # fmt: off
-            self.wfile.write((u"%s %d %s\r\n" % (
+            self.wfile.write((u"{} {:d} {}\r\n" .format (
                 self.protocol_version, code, message)).encode("latin")
             )
             # fmt: on
@@ -393,7 +401,7 @@ class TestServer(object):  # pylint: disable=too-many-instance-attributes
         """Build URL that is served by HTTP server."""
         if port is None:
             port = cast(int, self.port)
-        return urljoin("http://%s:%d" % (self.address, port), path)
+        return urljoin("http://{}:{:d}".format(self.address, port), path)
 
     def wait_request(
         self,
@@ -407,7 +415,9 @@ class TestServer(object):  # pylint: disable=too-many-instance-attributes
                 break
             time.sleep(0.01)
             if time.time() - start > timeout:
-                raise WaitTimeoutError("No request processed in %d seconds" % timeout)
+                raise WaitTimeoutError(
+                    "No request processed in {} seconds".format(timeout)
+                )
 
     def request_is_done(self):
         # type: () -> bool
@@ -436,7 +446,7 @@ class TestServer(object):  # pylint: disable=too-many-instance-attributes
         assert method is None or isinstance(method, str)
         assert count < 0 or count > 0
         if method and method not in VALID_METHODS:
-            raise TestServerError("Invalid method: %s" % method)
+            raise TestServerError("Invalid method: {}".format(method))
         self._responses[method].append(
             {
                 "count": count,

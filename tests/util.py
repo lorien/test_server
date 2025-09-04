@@ -3,7 +3,11 @@
 from threading import Lock
 
 import pytest
+
+# pylint: disable=import-error
 from six.moves.collections_abc import Iterator
+
+# pylint: enable=import-error
 from typing_extensions import TypedDict
 
 from test_server import TestServer

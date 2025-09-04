@@ -47,7 +47,11 @@ from email.utils import decode_rfc2231
 from typing import Any  # TYPE_CHECKING
 
 import six
+
+# pylint: disable=import-error,unused-import
 from six.moves.collections_abc import MutableMapping
+
+# pylint: enable=import-error,unused-import
 from six.moves.urllib.parse import unquote
 from typing_extensions import TypedDict
 
@@ -137,8 +141,8 @@ def parse_body(
     if len(form_parts) > multipart_form_part_limit:
         raise ValueError(
             "Number of multipart components exceeds the allowed limit"
-            " of %s, "
-            "this potentially indicates a DoS attack" % multipart_form_part_limit
+            " of {}, "
+            "this potentially indicates a DoS attack".format(multipart_form_part_limit)
         )
 
     return form_parts

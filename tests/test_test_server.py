@@ -7,7 +7,7 @@ from threading import Thread
 from typing import Any, cast
 
 import pytest
-import six
+import six  # pylint: disable=unused-import
 from six.moves.urllib.parse import quote, unquote
 from urllib3 import PoolManager
 from urllib3.response import HTTPResponse
@@ -224,7 +224,7 @@ def test_default_header_server(server):
     # type: (TestServer) -> None
     server.add_response(Response())
     info = request(server.get_url())
-    assert info.headers["server"] == ("TestServer/%s" % test_server.__version__)
+    assert info.headers["server"] == "TestServer/{}".format(test_server.__version__)
 
 
 def test_custom_header_server(server):

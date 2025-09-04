@@ -1,16 +1,17 @@
 __all__ = [
+    "InternalError",
+    "NoResponseError",
+    "RequestNotProcessedError",
     "TestServerError",
     "WaitTimeoutError",
-    "InternalError",
-    "RequestNotProcessedError",
-    "NoResponseError",
 ]
 
 
 class TestServerError(Exception):
     """Base class for all errrors raised by test_server package."""
 
-    __test__ = False  # for pytest ignore this class
+
+__test__ = False  # for pytest ignore this class
 
 
 class WaitTimeoutError(TestServerError):

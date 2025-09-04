@@ -5,7 +5,10 @@ from collections import OrderedDict
 from pprint import pprint  # pylint: disable=unused-import
 from typing import Any, Tuple, Union, cast
 
+# pylint: disable=import-error
 from six.moves.collections_abc import Iterator, MutableMapping
+
+# pylint: enable=import-error
 
 __all__ = ["HttpHeaderStorage"]
 
