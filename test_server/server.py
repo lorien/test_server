@@ -147,9 +147,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
 
     def _read_request_data(self):
         # type: () -> bytes
-        content_len = int(
-            self.headers.getheader("Content-Length", "0")  # type: ignore[attr-defined]
-        )  # type: int
+        content_len = int(self.headers.get("Content-Length", "0"))  # type: int
         return self.rfile.read(content_len)
 
     def _parse_qs_args(self):
@@ -172,9 +170,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             path=self.path.split("?")[0],
             data=req_data,
             method=method.upper(),
-            cookies=SimpleCookie(
-                self.headers.getheader("Cookie", "")  # type: ignore[attr-defined]
-            ),
+            cookies=SimpleCookie(self.headers.get("Cookie", "")),
             files=self.process_multipart_files(req_data, self.headers),
             headers=dict(self.headers),
         )
