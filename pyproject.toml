@@ -13,6 +13,7 @@ authors = [
 # https://pypi.org/pypi?%3Aaction=list_classifiers
 classifiers = [
     "Typing :: Typed",
+    "Programming Language :: Python",
     "Programming Language :: Python :: 2",
     "Programming Language :: Python :: 2.7",
     "Programming Language :: Python :: 3",
@@ -39,7 +40,7 @@ classifiers = [
 ]
 dependencies = [
     'six',
-    'typing-extensions; python_version <= "2.7"'
+    'typing-extensions; python_version <= "2.7"',
 ]
 
 [project.optional-dependencies]
