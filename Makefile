@@ -1,20 +1,31 @@
-.PHONY: init deps py27 dirs clean pytest test release mypy pylint ruff check build coverage
+.PHONY: init venv deps py2 py2-venv dirs clean pytest test release mypy pylint ruff check build coverage
 
 FILES_CHECK_MYPY = test_server tests
 FILES_CHECK_ALL = $(FILES_CHECK_MYPY)
 PY2_ROOT = /home/user/.pyenv/versions/2.7.18
+PY2_VENV = .venv-py27
 
-init: py27 deps dirs
+# PY3
+init: venv deps dirs
+
+
+venv:
+	virtualenv -p python3 .venv
 
 deps:
 	.venv/bin/pip install -r requirements_dev.txt
 	.venv/bin/pip install .
 
-py27:
-	$(PY2_ROOT)/bin/pip install virtualenv
-	$(PY2_ROOT)/bin/virtualenv --python=$(PY2_ROOT)/bin/python2.7 .venv
-	#.venv/bin/pip install -r requirements_dev.txt
+# PY2
+py2: py2-venv py2-deps dirs
 
+py2-venv:
+	$(PY2_ROOT)/bin/pip install virtualenv
+	$(PY2_ROOT)/bin/virtualenv --python=$(PY2_ROOT)/bin/python2.7 $(PY2_VENV)
+
+py2-deps:
+	$(PY2_VENV)/bin/pip install -r requirements_dev.txt
+	$(PY2_VENV)/bin/pip install .
 
 dirs:
 	if [ ! -e var/run ]; then mkdir -p var/run; fi
