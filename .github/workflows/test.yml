@@ -34,27 +34,27 @@ jobs:
       run: |
         make test
 
-    - name: Run coverage
-      if: matrix.os == "ubuntu-latest"
-      run: |
-        coverage lcov -o .coverage.lcov
+    #- name: Run coverage
+    #  if: matrix.os == "ubuntu-latest"
+    #  run: |
+    #    coverage lcov -o .coverage.lcov
 
-    - name: Coveralls Parallel
-      if: matrix.os == "ubuntu-latest"
-      uses: coverallsapp/github-action@v2
-      with:
-        github-token: ${{ secrets.github_token }}
-        path-to-lcov: ./.coverage.lcov
-        flag-name: run-${{ matrix.os }}-${{ matrix.python }}
-        parallel: true 
+    #- name: Coveralls Parallel
+    #  if: matrix.os == "ubuntu-latest"
+    #  uses: coverallsapp/github-action@v2
+    #  with:
+    #    github-token: ${{ secrets.github_token }}
+    #    path-to-lcov: ./.coverage.lcov
+    #    flag-name: run-${{ matrix.os }}-${{ matrix.python }}
+    #    parallel: true
 
-  finish:
-      needs: test
-      runs-on: ubuntu-latest
-      steps:
-      - name: Coveralls Finished
-        uses: coverallsapp/github-action@v2
-        with:
-          github-token: ${{ secrets.github_token }}
-          path-to-lcov: ./.coverage.lcov
-          parallel-finished: true
+#  finish:
+#      needs: test
+#      runs-on: ubuntu-latest
+#      steps:
+#      - name: Coveralls Finished
+#        uses: coverallsapp/github-action@v2
+#        with:
+#          github-token: ${{ secrets.github_token }}
+#          path-to-lcov: ./.coverage.lcov
+#          parallel-finished: true
