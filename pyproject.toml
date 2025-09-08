@@ -1,7 +1,7 @@
 [project]
 
 name = "test_server"
-version = "0.0.43"
+version = "0.0.44"
 description = "Server for testing HTTP clients"
 readme = "README.md"
 requires-python = ">=2.7"
