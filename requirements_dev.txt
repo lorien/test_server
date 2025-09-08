@@ -1,20 +1,26 @@
-sphinx
-mock
+# Devel
 bumpversion
-pytest
 build
 twine
+pkginfo
 
+# Test
+pytest
 coverage
 coveralls
 pytest-cov
 pytest-xdist
 urllib3
+mock
+
+# Docs
+sphinx
 
 # py27 compat
 typing-extensions; python_version <= "2.7"
 six
 
+# Types and Linters
 ruff; python_version >= "3.0"
 mypy; python_version >= "3.0"
 pylint; python_version >= "3.0"
