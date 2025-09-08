@@ -204,7 +204,7 @@ class TestServerHandler(BaseHTTPRequestHandler):
             else:
                 raise InternalError('Callback repsponse field "data" must be bytes')
 
-    def _process_required_response_headers(
+    def _add_required_response_headers(
         self,
         headers,  # type: HttpHeaderStorage
     ):
@@ -246,11 +246,10 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     raise InternalError(  # noqa: TRY301
                         'Response parameter "data" must be bytes'
                     )
-            self._process_required_response_headers(result.headers)
-            self.write_response_data(result.status, result.headers, result.data)
+            self._write_response_data(result.status, result.headers, result.data)
         except Exception as ex:
             LOG.exception("Unexpected error happend in test server request handler")
-            self.write_response_data(
+            self._write_response_data(
                 INTERNAL_ERROR_RESPONSE_STATUS,
                 HttpHeaderStorage(),
                 str(ex).encode("utf-8"),
@@ -258,8 +257,9 @@ class TestServerHandler(BaseHTTPRequestHandler):
         finally:
             test_srv.num_req_processed += 1
 
-    def write_response_data(self, status, headers, data):
+    def _write_response_data(self, status, headers, data):
         # type: (int, HttpHeaderStorage, six.binary_type) -> None
+        self._add_required_response_headers(headers)
         self.send_response(status)
         for key, val in headers.items():
             self.send_header(key, val)
