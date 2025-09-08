@@ -4,6 +4,7 @@ FILES_CHECK_MYPY = test_server tests
 FILES_CHECK_ALL = $(FILES_CHECK_MYPY)
 PY2_ROOT = /home/user/.pyenv/versions/2.7.18
 PY2_VENV = .venv-py27
+COVERAGE_TARGET = test_server
 
 # PY3
 init: venv deps dirs
@@ -37,10 +38,10 @@ clean:
 	find -name '__pycache__' -delete
 
 pytest:
-	pytest -n10 -x --cov test_server --cov-report term-missing
+	pytest -n10 -x --cov $(COVERAGE_TARGET) --cov-report term-missing
 
 test:
-	pytest --cov test_server --cov-report term-missing
+	pytest --cov $(COVERAGE_TARGET) --cov-report term-missing
 
 release:
 	git push \
