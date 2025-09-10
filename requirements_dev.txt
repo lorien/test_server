@@ -1,4 +1,6 @@
 # Devel
+setuptools
+wheel
 bumpversion
 build
 twine

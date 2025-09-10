@@ -28,33 +28,14 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -U -r requirements_dev.txt
-        pip install -U -e .
+
+    - name: Build wheel and install
+      run: |
+        make build
+        mv test_server backup_test_server
+        mv dist/*.whl dist/test_server-0.0.1-py2.py3-none-any.whl
+        pip install -U dist/test_server-0.0.1-py2.py3-none-any.whl
 
     - name: Run tests
       run: |
         make test
-
-    #- name: Run coverage
-    #  if: matrix.os == "ubuntu-latest"
-    #  run: |
-    #    coverage lcov -o .coverage.lcov
-
-    #- name: Coveralls Parallel
-    #  if: matrix.os == "ubuntu-latest"
-    #  uses: coverallsapp/github-action@v2
-    #  with:
-    #    github-token: ${{ secrets.github_token }}
-    #    path-to-lcov: ./.coverage.lcov
-    #    flag-name: run-${{ matrix.os }}-${{ matrix.python }}
-    #    parallel: true
-
-#  finish:
-#      needs: test
-#      runs-on: ubuntu-latest
-#      steps:
-#      - name: Coveralls Finished
-#        uses: coverallsapp/github-action@v2
-#        with:
-#          github-token: ${{ secrets.github_token }}
-#          path-to-lcov: ./.coverage.lcov
-#          parallel-finished: true
