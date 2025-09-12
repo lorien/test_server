@@ -135,14 +135,22 @@ class TestServerHandler(BaseHTTPRequestHandler):
         files = parse_multipart_form(request_data, options.get("boundary", "").encode())
         ret = {}  # type: MutableMapping[str, list[Mapping[str, Any]]]
         for field_key, item in files.items():
-            ret.setdefault(field_key, []).append(
-                {
-                    "name": field_key,
-                    "content_type": item["content_type"],
-                    "filename": item["filename"],
-                    "content": item["content"],
-                }
-            )
+            if isinstance(item, dict):
+                ret.setdefault(field_key, []).append(
+                    {
+                        "name": field_key,
+                        "content_type": item["content_type"],
+                        "filename": item["filename"],
+                        "content": item["content"],
+                    }
+                )
+            elif isinstance(item, six.text_type):
+                ret.setdefault(field_key, []).append(item)
+            else:
+                raise RuntimeError(
+                    "Unexpected type {} of item returned"
+                    "from parse_multipart_form()".format(type(item))
+                )
         return ret
 
     def _read_request_data(self):

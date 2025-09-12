@@ -503,3 +503,52 @@ def test_put_request(server):
     server.add_response(Response())
     request(server.get_url(), data=b"foo", method="put")
     assert server.request.method == "PUT"
+
+
+def test_multipart_file(server):
+    # type: (TestServer) -> None
+    server.add_response(Response())
+    boundary = "BOUNDARY"
+    data = b"\r\n".join(
+        [
+            "--{}".format(boundary).encode(),
+            b'Content-Disposition: form-data; name="text_data"; filename="test.txt"',
+            b"Content-Type: text/plain",
+            b"\r\n",
+            b"text file content",
+            ("--{}--".format(boundary)).encode(),
+        ]
+    )
+    request(
+        server.get_url(),
+        data=data,
+        method="post",
+        headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
+    )
+    req = server.get_request()
+    assert req.files["text_data"][0]["filename"] == "test.txt"
+    assert req.files["text_data"][0]["content"] == b"text file content"
+
+
+def test_multipart_data_nofilename(server):
+    # type: (TestServer) -> None
+    server.add_response(Response())
+    boundary = "BOUNDARY"
+    data = b"\r\n".join(
+        [
+            "--{}".format(boundary).encode(),
+            b'Content-Disposition: form-data; name="text_data"',
+            b"Content-Type: text/plain",
+            b"\r\n",
+            b"text file content",
+            ("--{}--".format(boundary)).encode(),
+        ]
+    )
+    request(
+        server.get_url(),
+        data=data,
+        method="post",
+        headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
+    )
+    req = server.get_request()
+    assert req.files["text_data"][0] == "text file content"
