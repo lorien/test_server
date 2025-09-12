@@ -557,3 +557,33 @@ def test_multipart_data_nofilename(server):
     assert req.files["text_data"][0]["filename"] is None
     assert req.files["text_data"][0]["content_type"] is None
     assert req.files["text_data"][0]["content"] == "text file content"
+
+
+def test_multiple_parts_same_name(server):
+    # type: (TestServer) -> None
+    server.add_response(Response())
+    boundary = "BOUNDARY"
+    data = b"\r\n".join(
+        [
+            "--{}".format(boundary).encode(),
+            b'Content-Disposition: form-data; name="field"',
+            b"\r\n",
+            b"first data",
+            "--{}".format(boundary).encode(),
+            b'Content-Disposition: form-data; name="field"',
+            b"\r\n",
+            b"second data",
+            ("--{}--".format(boundary)).encode(),
+        ]
+    )
+    request(
+        server.get_url(),
+        data=data,
+        method="post",
+        headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
+    )
+    req = server.get_request()
+    assert req.files["field"][0]["name"] == "field"
+    assert req.files["field"][0]["content"] == "first data"
+    assert req.files["field"][1]["name"] == "field"
+    assert req.files["field"][1]["content"] == "second data"

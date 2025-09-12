@@ -225,4 +225,5 @@ def parse_multipart_form(
             else:
                 fields[field_name].append(None)
 
-    return {k: v if len(v) > 1 else v[0] for k, v in fields.items()}
+    # return {k: v if len(v) > 1 else v[0] for k, v in fields.items()}
+    return fields  # .items()  # {k: v for k, v in fields.items()}

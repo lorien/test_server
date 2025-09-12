@@ -134,30 +134,31 @@ class TestServerHandler(BaseHTTPRequestHandler):
         _content_type, options = parse_content_header(headers["Content-Type"])
         files = parse_multipart_form(request_data, options.get("boundary", "").encode())
         ret = {}  # type: MutableMapping[str, list[Mapping[str, Any]]]
-        for field_key, item in files.items():
-            if isinstance(item, dict):
-                ret.setdefault(field_key, []).append(
-                    {
-                        "name": field_key,
-                        "content_type": item["content_type"],
-                        "filename": item["filename"],
-                        "content": item["content"],
-                    }
-                )
-            elif isinstance(item, six.text_type):
-                ret.setdefault(field_key, []).append(
-                    {
-                        "name": field_key,
-                        "content_type": None,
-                        "filename": None,
-                        "content": item,
-                    }
-                )
-            else:
-                raise TypeError(
-                    "Unexpected type {} of item returned"
-                    "from parse_multipart_form()".format(type(item))
-                )
+        for field_key, items in files.items():
+            for item in items:
+                if isinstance(item, dict):
+                    ret.setdefault(field_key, []).append(
+                        {
+                            "name": field_key,
+                            "content_type": item["content_type"],
+                            "filename": item["filename"],
+                            "content": item["content"],
+                        }
+                    )
+                elif isinstance(item, six.text_type):
+                    ret.setdefault(field_key, []).append(
+                        {
+                            "name": field_key,
+                            "content_type": None,
+                            "filename": None,
+                            "content": item,
+                        }
+                    )
+                else:
+                    raise TypeError(
+                        "Unexpected type {} of item returned"
+                        "from parse_multipart_form()".format(type(item))
+                    )
         return ret
 
     def _read_request_data(self):
