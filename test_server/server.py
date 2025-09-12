@@ -145,9 +145,16 @@ class TestServerHandler(BaseHTTPRequestHandler):
                     }
                 )
             elif isinstance(item, six.text_type):
-                ret.setdefault(field_key, []).append(item)
+                ret.setdefault(field_key, []).append(
+                    {
+                        "name": field_key,
+                        "content_type": None,
+                        "filename": None,
+                        "content": item,
+                    }
+                )
             else:
-                raise RuntimeError(
+                raise TypeError(
                     "Unexpected type {} of item returned"
                     "from parse_multipart_form()".format(type(item))
                 )

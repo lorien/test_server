@@ -526,7 +526,9 @@ def test_multipart_file(server):
         headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
     )
     req = server.get_request()
+    assert req.files["text_data"][0]["name"] == "text_data"
     assert req.files["text_data"][0]["filename"] == "test.txt"
+    assert req.files["text_data"][0]["content_type"] == "text/plain"
     assert req.files["text_data"][0]["content"] == b"text file content"
 
 
@@ -551,4 +553,7 @@ def test_multipart_data_nofilename(server):
         headers={"Content-Type": "multipart/form-data; boundary={}".format(boundary)},
     )
     req = server.get_request()
-    assert req.files["text_data"][0] == "text file content"
+    assert req.files["text_data"][0]["name"] == "text_data"
+    assert req.files["text_data"][0]["filename"] is None
+    assert req.files["text_data"][0]["content_type"] is None
+    assert req.files["text_data"][0]["content"] == "text file content"
