@@ -55,7 +55,7 @@ class Response(object):
         self,
         callback=None,  # type: None | Callable[..., Mapping[str, Any]]
         raw_callback=None,  # type: None | Callable[..., bytes]
-        data=None,  # type: None | bytes
+        data=None,  # type: None | bytes | str
         headers=None,  # type: None | HttpHeaderStream
         sleep=None,  # type: None | float
         status=None,  # type: None | int
@@ -201,8 +201,8 @@ class TestServerHandler(BaseHTTPRequestHandler):
             raise InternalError("Callback response is not a dict")
         if cb_res.get("type") != "response":
             raise InternalError(
-                "Callback response has invalid type key: {}".format(
-                    cb_res.get("type", "NA")
+                'Callback response has invalid "type" key: {}'.format(
+                    cb_res.get("type", "key-not-specified")
                 )
             )
         for key in cb_res:
@@ -255,12 +255,13 @@ class TestServerHandler(BaseHTTPRequestHandler):
             else:
                 result.status = resp.status
                 result.headers.extend(resp.headers.items())
-                data = resp.data
-                if isinstance(data, bytes):
-                    result.data = data
+                if isinstance(resp.data, bytes):
+                    result.data = resp.data
+                elif isinstance(resp.data, six.text_type):
+                    result.data = resp.data.encode("utf-8")
                 else:
                     raise InternalError(  # noqa: TRY301
-                        'Response parameter "data" must be bytes'
+                        'Response parameter "data" must be either str or bytes'
                     )
             self._write_response_data(result.status, result.headers, result.data)
         except Exception as ex:

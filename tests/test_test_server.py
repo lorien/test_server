@@ -73,12 +73,18 @@ def request(
 
 def test_non_ascii_header(server):
     # type: (TestServer) -> None
+    # fmt: off
     server.add_response(
-        Response(status=301, headers=[("Location", server.get_url(quote("фыва")))])
+        Response(
+            status=301, headers=[("Location", server.get_url(quote(u"фыва".encode("utf-8"))))]
+        )
     )
+    # fmt: on
     server.add_response(Response())
     request(server.get_url())
-    assert quote("фыва") in server.get_request().path
+    # fmt: off
+    assert quote(u"фыва".encode("utf-8")) in server.get_request().path
+    # fmt: on
 
 
 def test_get(server):
@@ -87,6 +93,22 @@ def test_get(server):
     server.add_response(Response(data=valid_data))
     res = request(server.get_url())
     assert res.data == valid_data
+
+
+def test_response_data_bytes(server):
+    # type: (TestServer) -> None
+    server.add_response(Response(data=b"test"))
+    res = request(server.get_url())
+    assert res.data == b"test"
+
+
+def test_response_data_str(server):
+    # type: (TestServer) -> None
+    # fmt: off
+    server.add_response(Response(data=u"test"))
+    # fmt: on
+    res = request(server.get_url())
+    assert res.data == b"test"
 
 
 def test_non_utf_request_data(server):
@@ -327,7 +349,7 @@ def test_response_data_invalid_type(server):
     server.add_response(Response(data=1))  # type: ignore[arg-type]
     res = request(server.get_url())
     assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
-    assert b"must be bytes" in res.data
+    assert b"must be either str or bytes" in res.data
 
 
 def test_stop_not_started_server():
@@ -384,7 +406,7 @@ def test_callback_response_invalid_type(server):
     server.add_response(Response(callback=callback))
     res = request(server.get_url())
     assert res.status == INTERNAL_ERROR_RESPONSE_STATUS
-    assert b"invalid type key" in res.data
+    assert b'has invalid "type" key' in res.data
 
 
 def test_callback_response_invalid_key(server):
