@@ -1,21 +1,22 @@
-.PHONY: init venv deps py2 py2-venv dirs clean pytest test release mypy pylint ruff check build coverage
+.PHONY: py3 py3-venv py3-deps py2 py2-venv py2-deps dirs clean pytest test release mypy pylint ruff check build coverage
 
 FILES_CHECK_MYPY = test_server tests
 FILES_CHECK_ALL = $(FILES_CHECK_MYPY)
 PY2_ROOT = /home/user/.pyenv/versions/2.7.18
-PY2_VENV = .venv-py27
+PY2_VENV = .venv-py2
+PY3_VENV = .venv-py3
 COVERAGE_TARGET = test_server
 
 # PY3
-init: venv deps dirs
+py3: py3-venv py3-deps dirs
 
 
-venv:
-	virtualenv -p python3 .venv
+py3-venv:
+	virtualenv -p python3 $(PY3_VENV)
 
-deps:
-	.venv/bin/pip install -r requirements_dev.txt
-	.venv/bin/pip install .
+py3-deps:
+	$(PY3_VENV)/bin/pip install -r requirements_dev.txt
+	$(PY3_VENV)/bin/pip install .
 
 # PY2
 py2: py2-venv py2-deps dirs
