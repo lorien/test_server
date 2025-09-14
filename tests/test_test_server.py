@@ -77,7 +77,7 @@ def test_non_ascii_header(server):
     server.add_response(
         Response(
             status=301, headers=[
-                ("Location", server.get_url(quote(u"фыва".encode())))
+                ("Location", server.get_url(quote(u"фыва".encode("utf-8"))))
             ]
         )
     )
