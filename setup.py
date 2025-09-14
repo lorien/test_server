@@ -2,7 +2,7 @@ from setuptools import setup
 
 setup(
     name="test_server",
-    version="0.0.47",
+    version="0.1.0",
     packages=["test_server"],
     install_requires=[
         "six",
