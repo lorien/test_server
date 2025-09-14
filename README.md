@@ -8,11 +8,13 @@
 
 Simple HTTP Server for testing HTTP clients.
 
+## Community
+
+You are welcome to join Telegram chat groups to talk about web scraping and data processing: [@grablab](https://t.me/grablab) (English), [@grablab_ru](https://t.me/grablab_ru) (Russian).
 
 ## Installation
 
 Run `pip install -U test_server`
-
 
 ## Usage Example
 
